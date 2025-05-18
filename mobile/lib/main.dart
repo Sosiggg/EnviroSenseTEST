@@ -1,44 +1,78 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(MyApp());
+import 'core/theme/app_theme.dart';
+import 'core/theme/theme_provider.dart';
+import 'data/repositories/auth_repository_impl.dart';
+import 'data/repositories/sensor_repository_impl.dart';
+import 'domain/repositories/auth_repository.dart';
+import 'domain/repositories/sensor_repository.dart';
+import 'presentation/blocs/auth/auth_bloc.dart';
+import 'presentation/blocs/sensor/sensor_bloc.dart';
+import 'presentation/pages/splash_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Set preferred orientations
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Initialize shared preferences
+  final sharedPreferences = await SharedPreferences.getInstance();
+
+  // Initialize repositories
+  final AuthRepository authRepository = AuthRepositoryImpl();
+  final SensorRepository sensorRepository = SensorRepositoryImpl();
+
+  // Initialize theme provider
+  final themeProvider = ThemeProvider(sharedPreferences);
+  await themeProvider.loadTheme();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
+        RepositoryProvider<AuthRepository>(create: (context) => authRepository),
+        RepositoryProvider<SensorRepository>(
+          create: (context) => sensorRepository,
+        ),
+        BlocProvider<AuthBloc>(
+          create:
+              (context) =>
+                  AuthBloc(authRepository: context.read<AuthRepository>()),
+        ),
+        BlocProvider<SensorBloc>(
+          create:
+              (context) => SensorBloc(
+                sensorRepository: context.read<SensorRepository>(),
+              ),
+        ),
+      ],
+      child: const EnviroSenseApp(),
+    ),
+  );
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  String message = "Loading...";
-
-  @override
-  void initState() {
-    super.initState();
-    fetchMessage();
-  }
-
-  void fetchMessage() async {
-    final response = await http.get(Uri.parse('http://10.0.2.2:8000/api/v1/hello/'));
-    if (response.statusCode == 200) {
-      setState(() {
-        message = jsonDecode(response.body)['message'];
-      });
-    } else {
-      setState(() {
-        message = 'Error: ${response.statusCode}';
-      });
-    }
-  }
+class EnviroSenseApp extends StatelessWidget {
+  const EnviroSenseApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
-      home: Scaffold(body: Center(child: Text(message))),
+      title: 'EnviroSense',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeProvider.themeMode,
+      home: const SplashScreen(),
     );
   }
 }
