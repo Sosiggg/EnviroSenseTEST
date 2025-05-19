@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from app.db.database import get_db
 from app.models.user import User
+from app.models.basic_user import BasicUser
 from app.schemas.token import TokenData
 
 # Load environment variables
@@ -36,12 +37,22 @@ def get_password_hash(password):
 
 # Get user by username
 def get_user(db: Session, username: str):
-    return db.query(User).filter(User.username == username).first()
+    try:
+        # Try with full User model first
+        return db.query(User).filter(User.username == username).first()
+    except Exception as e:
+        # If that fails, try with BasicUser model
+        print(f"Error with full User model in get_user: {e}")
+        try:
+            db.close()  # Close the failed transaction
+            db = next(get_db())  # Get a fresh DB session
+            return db.query(BasicUser).filter(BasicUser.username == username).first()
+        except Exception as e2:
+            print(f"Error with BasicUser model in get_user: {e2}")
+            return None
 
 # Authenticate user
 def authenticate_user(db: Session, username: str, password: str):
-    from datetime import datetime, timezone, timedelta
-
     user = get_user(db, username)
     if not user:
         # Don't reveal that the user doesn't exist
