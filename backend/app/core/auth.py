@@ -37,19 +37,8 @@ def get_password_hash(password):
 
 # Get user by username
 def get_user(db: Session, username: str):
-    try:
-        # Try with full User model first
-        return db.query(User).filter(User.username == username).first()
-    except Exception as e:
-        # If that fails, try with BasicUser model
-        print(f"Error with full User model in get_user: {e}")
-        try:
-            db.close()  # Close the failed transaction
-            db = next(get_db())  # Get a fresh DB session
-            return db.query(BasicUser).filter(BasicUser.username == username).first()
-        except Exception as e2:
-            print(f"Error with BasicUser model in get_user: {e2}")
-            return None
+    # Always use BasicUser to avoid column issues
+    return db.query(BasicUser).filter(BasicUser.username == username).first()
 
 # Authenticate user
 def authenticate_user(db: Session, username: str, password: str):

@@ -158,8 +158,9 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Map<String, dynamic>> resetPassword({
     required String token,
     required String newPassword,
+    required String email,
   }) async {
-    final data = {'token': token, 'new_password': newPassword};
+    final data = {'token': token, 'new_password': newPassword, 'email': email};
 
     final response = await _apiClient.post(
       ApiConstants.resetPassword,

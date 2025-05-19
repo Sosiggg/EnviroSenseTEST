@@ -8,10 +8,12 @@ import '../../widgets/custom_text_field.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String token;
+  final String email;
 
   const ResetPasswordPage({
     super.key,
     required this.token,
+    required this.email,
   });
 
   @override
@@ -33,11 +35,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   void _resetPassword() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthBloc>().add(
-            AuthResetPasswordRequested(
-              token: widget.token,
-              newPassword: _passwordController.text.trim(),
-            ),
-          );
+        AuthResetPasswordRequested(
+          token: widget.token,
+          newPassword: _passwordController.text.trim(),
+          email: widget.email,
+        ),
+      );
     }
   }
 
@@ -163,7 +166,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     // Back to Login
                     TextButton(
                       onPressed: () {
-                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
                       },
                       child: const Text('Back to Login'),
                     ),

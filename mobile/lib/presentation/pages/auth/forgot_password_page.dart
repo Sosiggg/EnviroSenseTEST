@@ -70,12 +70,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
 
-                // Navigate to reset password page with the token
+                // Navigate to reset password page with the token and email
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
                     builder:
                         (_) => ResetPasswordPage(
                           token: _tokenController.text.trim(),
+                          email: _emailController.text.trim(),
                         ),
                   ),
                 );
