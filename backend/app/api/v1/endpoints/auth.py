@@ -22,9 +22,13 @@ from app.schemas.user import UserCreate, User as UserSchema, UserUpdate, Passwor
 # Create logger
 logger = logging.getLogger(__name__)
 
-# Define request models for forgot password
+# Define request models for forgot password and reset password
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 router = APIRouter()
 
@@ -150,4 +154,46 @@ async def forgot_password(
     logger.info(f"Password reset requested for user: {user.username}")
     logger.info(f"Reset token generated: {reset_token}")
 
+    # In a real implementation, we would store the token in the database
+    user.reset_token = reset_token
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    db.commit()
+
     return {"message": "If your email is registered, you will receive password reset instructions."}
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset a user's password using a reset token.
+    """
+    # Find user by reset token
+    user = db.query(User).filter(User.reset_token == request.token).first()
+
+    # Check if user exists and token is valid
+    if not user or not user.reset_token_expires:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token"
+        )
+
+    # Check if token has expired
+    if user.reset_token_expires < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token has expired"
+        )
+
+    # Update password
+    user.hashed_password = get_password_hash(request.new_password)
+
+    # Clear reset token
+    user.reset_token = None
+    user.reset_token_expires = None
+
+    # Save changes
+    db.commit()
+
+    return {"message": "Password has been reset successfully"}
