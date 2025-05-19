@@ -191,32 +191,50 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Profile Header
-                    Center(
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            child: Icon(
-                              Icons.person,
-                              size: 50,
-                              color: Theme.of(context).colorScheme.onPrimary,
-                            ),
+                    // Profile Header - Responsive
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Adjust avatar size based on screen width
+                        final avatarRadius =
+                            constraints.maxWidth < 400 ? 40.0 : 50.0;
+                        final iconSize =
+                            constraints.maxWidth < 400 ? 40.0 : 50.0;
+                        final textStyle =
+                            constraints.maxWidth < 400
+                                ? Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.bold)
+                                : Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold);
+
+                        return Center(
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                radius: avatarRadius,
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.primary,
+                                child: Icon(
+                                  Icons.person,
+                                  size: iconSize,
+                                  color:
+                                      Theme.of(context).colorScheme.onPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _user!.username,
+                                style: textStyle,
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                _user!.email,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _user!.username,
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            _user!.email,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 32),
 
