@@ -14,9 +14,9 @@ from app.core.auth import (
     verify_password,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from app.core import db_utils
 from app.db.database import get_db
 from app.models.user import User
-from app.models.basic_user import BasicUser
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, User as UserSchema, UserUpdate, PasswordChange
 
@@ -66,7 +66,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user['username']}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -132,10 +132,8 @@ async def forgot_password(
     For this demo, we'll just log the request and return a success message.
     """
     try:
-        # Always use the BasicUser model for queries to avoid column issues
-        # This ensures we only access columns that definitely exist
-        user = db.query(BasicUser).filter(BasicUser.email == request.email).first()
-        logger.info("Using BasicUser model for query")
+        # Use our safe db_utils function to get the user
+        user = db_utils.get_user_by_email(db, request.email)
 
         if not user:
             # Don't reveal that the user doesn't exist
@@ -146,25 +144,17 @@ async def forgot_password(
         reset_token = secrets.token_urlsafe(32)
 
         # Log the token for demo purposes
-        logger.info(f"Password reset requested for user: {user.username}")
+        logger.info(f"Password reset requested for user: {user['username']}")
         logger.info(f"Reset token generated: {reset_token}")
 
         # Try to store the token in the database if possible
-        try:
-            # Check if we're using the full User model with reset_token
-            if isinstance(user, User) and hasattr(user, 'reset_token'):
-                user.reset_token = reset_token
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        token_stored = db_utils.store_reset_token(db, user['id'], reset_token, expires_at)
 
-                if hasattr(user, 'reset_token_expires'):
-                    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-
-                db.commit()
-                logger.info("Token stored in database")
-            else:
-                logger.warning("Using BasicUser model - token will only be logged, not stored")
-        except Exception as e:
-            logger.error(f"Error storing token: {e}")
-            # Continue anyway - we'll just log the token instead
+        if token_stored:
+            logger.info("Token stored in database")
+        else:
+            logger.warning("Token could not be stored in database - it will only be logged")
 
         return {"message": "If your email is registered, you will receive password reset instructions."}
 
@@ -210,40 +200,44 @@ async def reset_password(
 
         # For this demo version, we need to add the email to the request
         # In a real app, we would extract the user from the token
-        if not hasattr(request, 'email') or not request.email:
+        if not request.email:
             # We need the email to identify the user
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Please provide your email along with the token"
             )
 
-        # Get the user by email
-        user = db.query(BasicUser).filter(BasicUser.email == request.email).first()
+        # Try to find user by token first
+        user = db_utils.get_user_by_reset_token(db, request.token)
+
+        # If not found by token, try by email
         if not user:
-            # Don't reveal that the user doesn't exist
-            logger.warning(f"Reset password attempt for non-existent email: {request.email}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid token or email"
-            )
+            user = db_utils.get_user_by_email(db, request.email)
+            if not user:
+                # Don't reveal that the user doesn't exist
+                logger.warning(f"Reset password attempt for non-existent email: {request.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid token or email"
+                )
 
         # Update the user's password
         try:
-            # Update password
-            user.hashed_password = get_password_hash(request.new_password)
+            # Generate new password hash
+            hashed_password = get_password_hash(request.new_password)
 
-            # Clear reset token if columns exist
-            if hasattr(user, 'reset_token'):
-                user.reset_token = None
+            # Update password using our safe function
+            success = db_utils.update_user_password(db, user['id'], hashed_password)
 
-                if hasattr(user, 'reset_token_expires'):
-                    user.reset_token_expires = None
+            if success:
+                logger.info(f"Password reset successful for user: {user['username']}")
 
-            # Save changes
-            db.commit()
-            logger.info(f"Password reset successful for user: {user.username}")
+                # Try to clear the reset token if it exists
+                db_utils.store_reset_token(db, user['id'], None, None)
 
-            return {"message": "Password has been reset successfully"}
+                return {"message": "Password has been reset successfully"}
+            else:
+                raise Exception("Failed to update password")
         except Exception as e:
             logger.error(f"Error updating password: {e}")
             raise HTTPException(

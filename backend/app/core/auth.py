@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from app.db.database import get_db
 from app.models.user import User
-from app.models.basic_user import BasicUser
+from app.core import db_utils
 from app.schemas.token import TokenData
 
 # Load environment variables
@@ -37,8 +37,8 @@ def get_password_hash(password):
 
 # Get user by username
 def get_user(db: Session, username: str):
-    # Always use BasicUser to avoid column issues
-    return db.query(BasicUser).filter(BasicUser.username == username).first()
+    # Use our safe db_utils function
+    return db_utils.get_user_by_username(db, username)
 
 # Authenticate user
 def authenticate_user(db: Session, username: str, password: str):
@@ -47,8 +47,8 @@ def authenticate_user(db: Session, username: str, password: str):
         # Don't reveal that the user doesn't exist
         return False
 
-    # Basic authentication if brute force protection is not available
-    if not verify_password(password, user.hashed_password):
+    # Basic authentication
+    if not verify_password(password, user['hashed_password']):
         return False
 
     return user
@@ -80,9 +80,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(db, username=token_data.username)
-    if user is None:
+
+    # Get user with our safe function
+    user_dict = get_user(db, username=token_data.username)
+    if user_dict is None:
         raise credentials_exception
+
+    # Convert dictionary to User object for compatibility
+    user = User(
+        id=user_dict['id'],
+        username=user_dict['username'],
+        email=user_dict['email'],
+        hashed_password=user_dict['hashed_password'],
+        is_active=user_dict['is_active']
+    )
     return user
 
 # Get current active user
@@ -101,5 +112,18 @@ def verify_token(token: str, db: Session):
         token_data = TokenData(username=username)
     except JWTError:
         return None
-    user = get_user(db, username=token_data.username)
+
+    # Get user with our safe function
+    user_dict = get_user(db, username=token_data.username)
+    if user_dict is None:
+        return None
+
+    # Convert dictionary to User object for compatibility
+    user = User(
+        id=user_dict['id'],
+        username=user_dict['username'],
+        email=user_dict['email'],
+        hashed_password=user_dict['hashed_password'],
+        is_active=user_dict['is_active']
+    )
     return user
