@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
+from pydantic import BaseModel, EmailStr
+import secrets
+import logging
 
 from app.core.auth import (
     authenticate_user,
@@ -15,6 +18,13 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, User as UserSchema, UserUpdate, PasswordChange
+
+# Create logger
+logger = logging.getLogger(__name__)
+
+# Define request models for forgot password
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
 
 router = APIRouter()
 
@@ -100,3 +110,44 @@ async def change_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Handle forgot password request.
+    In a production environment, this would:
+    1. Generate a password reset token
+    2. Store it in the database with an expiration time
+    3. Send an email with a link to reset the password
+
+    For this demo, we'll just log the request and return a success message.
+    """
+    # Find user by email
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        # Don't reveal that the user doesn't exist
+        logger.info(f"Forgot password request for non-existent email: {request.email}")
+        return {"message": "If your email is registered, you will receive password reset instructions."}
+
+    # In a real implementation, we would:
+    # 1. Generate a reset token
+    reset_token = secrets.token_urlsafe(32)
+
+    # 2. Store the token with an expiration time
+    # user.reset_token = reset_token
+    # user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    # db.commit()
+
+    # 3. Send an email with the reset link
+    # reset_url = f"https://envirosense-app.com/reset-password?token={reset_token}"
+    # send_email(user.email, "Password Reset", f"Click here to reset your password: {reset_url}")
+
+    # For demo purposes, just log the token
+    logger.info(f"Password reset requested for user: {user.username}")
+    logger.info(f"Reset token generated: {reset_token}")
+
+    return {"message": "If your email is registered, you will receive password reset instructions."}
