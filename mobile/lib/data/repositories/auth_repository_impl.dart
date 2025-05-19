@@ -83,17 +83,29 @@ class AuthRepositoryImpl implements AuthRepository {
           final response = dioResponse.data;
           AppLogger.i('Login response status: ${dioResponse.statusCode}');
 
-          if (response != null && response['access_token'] != null) {
-            await saveToken(response['access_token']);
+          // Ensure response is a Map<String, dynamic>
+          Map<String, dynamic> responseMap;
+          if (response is Map) {
+            // Convert to Map<String, dynamic> to ensure type safety
+            responseMap = Map<String, dynamic>.from(response);
+          } else {
+            AppLogger.w('Response is not a Map: $response');
+            return {
+              'error': true,
+              'message': 'Invalid response format from server',
+            };
+          }
+
+          if (responseMap.containsKey('access_token')) {
+            await saveToken(responseMap['access_token']);
             AppLogger.i('Token saved successfully');
-            return response;
+            return responseMap;
           } else {
             AppLogger.w('Login failed: ${dioResponse.statusMessage}');
-            return response ??
-                {
-                  'error': true,
-                  'message': 'Login failed: ${dioResponse.statusMessage}',
-                };
+            return {
+              'error': true,
+              'message': 'Login failed: ${dioResponse.statusMessage}',
+            };
           }
         } on DioException catch (e) {
           lastError = e;
