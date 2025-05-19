@@ -4,6 +4,7 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/api_exceptions.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_logger.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -178,13 +179,32 @@ class AuthRepositoryImpl implements AuthRepository {
     String? username,
     String? email,
   }) async {
-    final data = {
-      if (username != null) 'username': username,
-      if (email != null) 'email': email,
-    };
+    try {
+      AppLogger.i('Updating user profile: username=$username, email=$email');
 
-    final response = await _apiClient.put(ApiConstants.userProfile, data: data);
-    return response;
+      final data = {
+        if (username != null && username.isNotEmpty) 'username': username,
+        if (email != null && email.isNotEmpty) 'email': email,
+      };
+
+      if (data.isEmpty) {
+        AppLogger.w('No data provided for profile update');
+        return {'error': true, 'message': 'No data provided for update'};
+      }
+
+      final response = await _apiClient.put(
+        ApiConstants.userProfile,
+        data: data,
+      );
+      AppLogger.i('Profile update response: $response');
+      return response;
+    } on ApiException catch (e) {
+      AppLogger.e('API error during profile update: ${e.message}', e);
+      return {'error': true, 'message': e.message};
+    } catch (e) {
+      AppLogger.e('Unexpected error during profile update: $e', e);
+      return {'error': true, 'message': 'Unexpected error: ${e.toString()}'};
+    }
   }
 
   @override
@@ -192,16 +212,36 @@ class AuthRepositoryImpl implements AuthRepository {
     required String currentPassword,
     required String newPassword,
   }) async {
-    final data = {
-      'current_password': currentPassword,
-      'new_password': newPassword,
-    };
+    try {
+      AppLogger.i('Changing password');
 
-    final response = await _apiClient.post(
-      ApiConstants.changePassword,
-      data: data,
-    );
-    return response;
+      if (currentPassword.isEmpty || newPassword.isEmpty) {
+        AppLogger.w('Current or new password is empty');
+        return {
+          'error': true,
+          'message': 'Current or new password cannot be empty',
+        };
+      }
+
+      final data = {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      };
+
+      final response = await _apiClient.post(
+        ApiConstants.changePassword,
+        data: data,
+      );
+
+      AppLogger.i('Password change response: $response');
+      return response;
+    } on ApiException catch (e) {
+      AppLogger.e('API error during password change: ${e.message}', e);
+      return {'error': true, 'message': e.message};
+    } catch (e) {
+      AppLogger.e('Unexpected error during password change: $e', e);
+      return {'error': true, 'message': 'Unexpected error: ${e.toString()}'};
+    }
   }
 
   @override
