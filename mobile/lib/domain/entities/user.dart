@@ -12,10 +12,18 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // Handle the case where id might be a string or an int
+    int userId;
+    if (json['id'] is String) {
+      userId = int.tryParse(json['id']) ?? 0;
+    } else {
+      userId = json['id'] ?? 0;
+    }
+
     return User(
-      id: json['id'],
-      username: json['username'],
-      email: json['email'],
+      id: userId,
+      username: json['username'] ?? '',
+      email: json['email'] ?? '',
       isActive: json['is_active'] ?? true,
     );
   }

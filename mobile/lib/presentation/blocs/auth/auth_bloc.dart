@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/errors/api_exceptions.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import 'auth_event.dart';
@@ -100,12 +101,47 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         // Get user profile
         final userProfile = await authRepository.getUserProfile();
-        final user = User.fromJson(userProfile);
 
-        emit(AuthLoginSuccess(token: token, user: user));
+        // Check if there was an error in the user profile response
+        if (userProfile.containsKey('error') && userProfile['error'] == true) {
+          // If we can't get the profile but have a token, still consider it a success
+          AppLogger.w('Failed to get user profile: ${userProfile['message']}');
+          emit(
+            AuthLoginSuccess(
+              token: token,
+              user: User(
+                id: 0,
+                username: event.username,
+                email: '',
+                isActive: true,
+              ),
+            ),
+          );
+          return;
+        }
+
+        try {
+          final user = User.fromJson(userProfile);
+          emit(AuthLoginSuccess(token: token, user: user));
+        } catch (parseError) {
+          // If we can't parse the user profile but have a token, still consider it a success
+          AppLogger.e('Error parsing user profile: $parseError', parseError);
+          AppLogger.e('User profile data: $userProfile');
+          emit(
+            AuthLoginSuccess(
+              token: token,
+              user: User(
+                id: 0,
+                username: event.username,
+                email: '',
+                isActive: true,
+              ),
+            ),
+          );
+        }
       } catch (profileError) {
         // If we can't get the profile but have a token, still consider it a success
-        // but with a warning
+        AppLogger.w('Error fetching user profile: $profileError');
         emit(
           AuthLoginSuccess(
             token: token,
@@ -156,6 +192,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final response = await authRepository.resetPassword(
         token: event.token,
         newPassword: event.newPassword,
+        email: event.email,
       );
 
       emit(
@@ -194,8 +231,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     try {
       final userProfile = await authRepository.getUserProfile();
-      final user = User.fromJson(userProfile);
-      emit(AuthAuthenticated(user));
+
+      // Check if there was an error in the response
+      if (userProfile.containsKey('error') && userProfile['error'] == true) {
+        emit(
+          AuthFailure(userProfile['message'] ?? 'Failed to get user profile'),
+        );
+        return;
+      }
+
+      try {
+        final user = User.fromJson(userProfile);
+        emit(AuthAuthenticated(user));
+      } catch (parseError) {
+        // If we can't parse the user profile, log the error and emit a failure
+        AppLogger.e('Error parsing user profile: $parseError', parseError);
+        AppLogger.e('User profile data: $userProfile');
+        emit(AuthFailure('Error parsing user profile: $parseError'));
+      }
     } on ApiException catch (e) {
       emit(AuthFailure(e.message));
     } catch (e) {
@@ -215,14 +268,28 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         email: event.email,
       );
 
-      final user = User.fromJson(response);
+      // Check if there was an error in the response
+      if (response.containsKey('error') && response['error'] == true) {
+        emit(AuthFailure(response['message'] ?? 'Failed to update profile'));
+        return;
+      }
 
-      emit(
-        AuthProfileUpdateSuccess(
-          user: user,
-          message: 'Profile updated successfully',
-        ),
-      );
+      try {
+        final user = User.fromJson(response);
+        emit(
+          AuthProfileUpdateSuccess(
+            user: user,
+            message: 'Profile updated successfully',
+          ),
+        );
+      } catch (parseError) {
+        AppLogger.e(
+          'Error parsing updated user profile: $parseError',
+          parseError,
+        );
+        AppLogger.e('User profile data: $response');
+        emit(AuthFailure('Error updating profile: $parseError'));
+      }
     } on ApiException catch (e) {
       emit(AuthFailure(e.message));
     } catch (e) {
