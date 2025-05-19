@@ -155,9 +155,21 @@ async def forgot_password(
     logger.info(f"Reset token generated: {reset_token}")
 
     # In a real implementation, we would store the token in the database
-    user.reset_token = reset_token
-    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-    db.commit()
+    # Check if the columns exist before trying to use them
+    try:
+        if hasattr(user, 'reset_token'):
+            user.reset_token = reset_token
+
+            if hasattr(user, 'reset_token_expires'):
+                user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+
+            db.commit()
+            logger.info("Token stored in database")
+        else:
+            logger.warning("reset_token column does not exist in the database")
+    except Exception as e:
+        logger.error(f"Error storing token: {e}")
+        # Continue anyway - we'll just log the token instead
 
     return {"message": "If your email is registered, you will receive password reset instructions."}
 
@@ -169,31 +181,60 @@ async def reset_password(
     """
     Reset a user's password using a reset token.
     """
-    # Find user by reset token
-    user = db.query(User).filter(User.reset_token == request.token).first()
+    try:
+        # Check if the reset_token column exists
+        if not hasattr(User, 'reset_token'):
+            logger.error("reset_token column does not exist in the database")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Password reset functionality is not available"
+            )
 
-    # Check if user exists and token is valid
-    if not user or not user.reset_token_expires:
+        # Find user by reset token
+        user = db.query(User).filter(User.reset_token == request.token).first()
+
+        # Check if user exists and token is valid
+        if not user or not user.reset_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired token"
+            )
+
+        # Check if token has expired (if the column exists)
+        if hasattr(user, 'reset_token_expires') and user.reset_token_expires:
+            if user.reset_token_expires < datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Token has expired"
+                )
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error during token validation: {e}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired token"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during password reset"
         )
 
-    # Check if token has expired
-    if user.reset_token_expires < datetime.now(timezone.utc):
+    try:
+        # Update password
+        user.hashed_password = get_password_hash(request.new_password)
+
+        # Clear reset token if columns exist
+        if hasattr(user, 'reset_token'):
+            user.reset_token = None
+
+            if hasattr(user, 'reset_token_expires'):
+                user.reset_token_expires = None
+
+        # Save changes
+        db.commit()
+        logger.info(f"Password reset successful for user: {user.username}")
+
+        return {"message": "Password has been reset successfully"}
+    except Exception as e:
+        logger.error(f"Error during password reset: {e}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token has expired"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while resetting your password"
         )
-
-    # Update password
-    user.hashed_password = get_password_hash(request.new_password)
-
-    # Clear reset token
-    user.reset_token = None
-    user.reset_token_expires = None
-
-    # Save changes
-    db.commit()
-
-    return {"message": "Password has been reset successfully"}

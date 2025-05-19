@@ -40,20 +40,27 @@ def get_user(db: Session, username: str):
 
 # Authenticate user
 def authenticate_user(db: Session, username: str, password: str):
+    from datetime import datetime, timezone, timedelta
+
     user = get_user(db, username)
     if not user:
+        # Don't reveal that the user doesn't exist
         return False
+
+    # Basic authentication if brute force protection is not available
     if not verify_password(password, user.hashed_password):
         return False
+
     return user
 
 # Create access token
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
+    now = datetime.now(datetime.timezone.utc)
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = now + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
