@@ -41,22 +41,6 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Check if user exists first to provide specific lockout message
-    from datetime import datetime, timezone
-
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if user and user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
-        # Calculate remaining lockout time
-        remaining_time = user.account_locked_until - datetime.now(timezone.utc)
-        minutes = remaining_time.seconds // 60
-
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Account locked due to too many failed attempts. Try again in {minutes} minutes.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Proceed with normal authentication
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -64,7 +48,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires

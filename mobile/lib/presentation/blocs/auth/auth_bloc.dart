@@ -87,8 +87,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
 
-      // Get token and ensure it's a string
-      var token = response['access_token'];
+      final token = response['access_token'];
       if (token == null) {
         emit(
           const AuthFailure(
@@ -97,9 +96,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         );
         return;
       }
-
-      // Convert token to string if it's not already
-      token = token.toString();
 
       try {
         // Get user profile

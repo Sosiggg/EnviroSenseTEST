@@ -1,18 +1,9 @@
 from logging.config import fileConfig
-import os
-import sys
-from dotenv import load_dotenv
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-
-# Add the parent directory to the path so we can import from app
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Load environment variables
-load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -25,29 +16,14 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from app.db.database import Base
-from app.models import User, SensorData  # Import all models to register them with Base.metadata
-
-# Import the models to ensure they are registered with Base.metadata
-target_metadata = Base.metadata
+# from myapp import mymodel
+# target_metadata = mymodel.Base.metadata
+target_metadata = None
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-
-# Set the database URL from environment variables
-postgres_host = os.getenv("POSTGRES_HOST", "dpg-cqvnvvf6fquc73f1iqg0-a.oregon-postgres.render.com")
-postgres_db = os.getenv("POSTGRES_DB", "envirosense_db")
-postgres_user = os.getenv("POSTGRES_USER", "envirosense_db_user")
-postgres_password = os.getenv("POSTGRES_PASSWORD", "Ij9Yd9Yd9Yd9Yd9Yd9Yd9Yd9Yd9Yd9")
-postgres_port = os.getenv("POSTGRES_PORT", "5432")
-
-# Override the URL in the config
-config.set_main_option(
-    "sqlalchemy.url",
-    f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
-)
 
 
 def run_migrations_offline() -> None:
