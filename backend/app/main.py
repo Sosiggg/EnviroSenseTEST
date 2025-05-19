@@ -11,9 +11,17 @@ origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:8081",
+    "http://localhost:8000",
+    "http://localhost:9101",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:9101",
+    "http://127.0.0.1:*",
+    "http://localhost:*",
     "https://envirosense-2khv.onrender.com",
     "https://envirosense-2khv.onrender.com:443",
+    # Allow all origins during development
+    "*"
 ]
 
 app.add_middleware(
