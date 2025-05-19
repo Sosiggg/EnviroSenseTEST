@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -38,22 +38,50 @@ def get_password_hash(password):
 def get_user(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
 
-# Authenticate user
+# Authenticate user with brute force protection
 def authenticate_user(db: Session, username: str, password: str):
     user = get_user(db, username)
     if not user:
+        # Don't reveal that the user doesn't exist
         return False
+
+    # Check if account is locked
+    now = datetime.now(timezone.utc)
+    if user.account_locked_until and user.account_locked_until > now:
+        # Account is locked, but don't reveal this to the user
+        # We'll return False which will result in the same error message
+        return False
+
+    # Verify password
     if not verify_password(password, user.hashed_password):
+        # Password is incorrect, increment failed attempts
+        user.failed_login_attempts += 1
+        user.last_failed_login = now
+
+        # Check if we need to lock the account (5 or more failed attempts)
+        if user.failed_login_attempts >= 5:
+            # Lock account for 30 minutes
+            user.account_locked_until = now + timedelta(minutes=30)
+
+        db.commit()
         return False
+
+    # Password is correct, reset failed attempts
+    user.failed_login_attempts = 0
+    user.last_failed_login = None
+    user.account_locked_until = None
+    db.commit()
+
     return user
 
 # Create access token
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
+    now = datetime.now(timezone.utc)
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = now + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
