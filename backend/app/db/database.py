@@ -22,16 +22,30 @@ if DATABASE_URL.startswith("sqlite"):
     )
 else:
     # For PostgreSQL on Render with optimized connection pool settings
-    engine = create_engine(
-        DATABASE_URL,
-        poolclass=QueuePool,
-        pool_size=10,  # Increased from default 5
-        max_overflow=20,  # Increased from default 10
-        pool_timeout=60,  # Increased from default 30
-        pool_recycle=1800,  # Recycle connections after 30 minutes
-        pool_pre_ping=True  # Check connection validity before using it
-    )
-    logger.info(f"Database engine created with pool_size=10, max_overflow=20, pool_timeout=60")
+    try:
+        engine = create_engine(
+            DATABASE_URL,
+            poolclass=QueuePool,
+            pool_size=5,  # Reduced to avoid hitting connection limits
+            max_overflow=10,  # Reduced to avoid hitting connection limits
+            pool_timeout=60,  # Increased from default 30
+            pool_recycle=1800,  # Recycle connections after 30 minutes
+            pool_pre_ping=True,  # Check connection validity before using it
+            connect_args={"connect_timeout": 10}  # Add connection timeout
+        )
+        logger.info(f"Database engine created with pool_size=5, max_overflow=10, pool_timeout=60")
+    except Exception as e:
+        logger.error(f"Error creating database engine: {e}")
+        # Fallback to minimal settings
+        engine = create_engine(
+            DATABASE_URL,
+            poolclass=QueuePool,
+            pool_size=2,
+            max_overflow=5,
+            pool_timeout=30,
+            pool_pre_ping=True
+        )
+        logger.warning(f"Using fallback database engine settings due to error")
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -41,19 +55,30 @@ Base = declarative_base()
 
 # Get database session with retry logic
 def get_db():
-    retries = 3
+    retries = 5  # Increased retries
     last_exception = None
 
     for attempt in range(retries):
         try:
             db = SessionLocal()
-            # No need to test the connection - SQLAlchemy will do this automatically
-            # with pool_pre_ping=True
+
+            # Add a simple test query that doesn't use text() to avoid issues
+            if attempt == 0:  # Only test on first attempt to reduce overhead
+                try:
+                    # Use a simple query with text() to avoid SQLAlchemy errors
+                    from sqlalchemy import text
+                    db.execute(text("SELECT 1")).fetchone()
+                except Exception as test_error:
+                    logger.warning(f"Connection test failed: {str(test_error)}")
+                    # Don't fail here, continue with the session
 
             try:
                 yield db
             finally:
-                db.close()
+                try:
+                    db.close()
+                except Exception as close_error:
+                    logger.warning(f"Error closing database connection: {str(close_error)}")
             return  # Successfully yielded and closed the session
         except Exception as e:
             last_exception = e
@@ -62,10 +87,21 @@ def get_db():
             try:
                 if 'db' in locals():
                     db.close()
-            except:
-                pass
+            except Exception as close_error:
+                logger.warning(f"Error closing database connection during retry: {str(close_error)}")
+
+            # Add exponential backoff
+            if attempt < retries - 1:  # Don't sleep on the last attempt
+                import time
+                sleep_time = 0.1 * (2 ** attempt)  # 0.1, 0.2, 0.4, 0.8, 1.6 seconds
+                logger.info(f"Waiting {sleep_time:.2f} seconds before retry...")
+                time.sleep(sleep_time)
 
     # If we get here, all retries failed
     logger.error(f"All database connection attempts failed: {str(last_exception)}")
-    # Raise the last exception to be handled by FastAPI
-    raise last_exception
+    # Return a default error response instead of raising an exception
+    from fastapi import HTTPException, status
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Database connection failed. Please try again later."
+    )
