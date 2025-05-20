@@ -13,8 +13,8 @@ export const getSensorData = async () => {
 };
 
 // Connect to WebSocket for real-time sensor data
-export const connectToWebSocket = (token) => {
-  websocketManager.connect(token);
+export const connectToWebSocket = (email) => {
+  websocketManager.connect(email);
 };
 
 // Disconnect from WebSocket
@@ -31,12 +31,12 @@ export const addWebSocketListener = (callback) => {
 export const getLatestSensorData = async () => {
   try {
     const data = await getSensorData();
-    
+
     // Sort by timestamp in descending order
     const sortedData = [...data].sort((a, b) => {
       return new Date(b.timestamp) - new Date(a.timestamp);
     });
-    
+
     // Return the latest data or null if no data
     return sortedData.length > 0 ? sortedData[0] : null;
   } catch (error) {

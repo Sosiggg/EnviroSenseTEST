@@ -10,16 +10,16 @@ class WebSocketManager {
     this.pingInterval = null;
   }
 
-  // Connect to the WebSocket server
-  connect(token) {
+  // Connect to the WebSocket server using email
+  connect(email) {
     if (this.socket) {
       this.disconnect();
     }
 
-    // Use the production URL by default
-    const wsUrl = `wss://envirosense-2khv.onrender.com/api/v1/sensor/ws?token=${token}`;
+    // Use the production URL by default with email parameter
+    const wsUrl = `wss://envirosense-2khv.onrender.com/api/v1/sensor/ws?email=${encodeURIComponent(email)}`;
     // For local development, uncomment the line below
-    // const wsUrl = `ws://localhost:8000/api/v1/sensor/ws?token=${token}`;
+    // const wsUrl = `ws://localhost:8000/api/v1/sensor/ws?email=${encodeURIComponent(email)}`;
 
     try {
       this.socket = new WebSocket(wsUrl);
@@ -71,11 +71,19 @@ class WebSocketManager {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-      
+
       setTimeout(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-          this.connect(token);
+        // Get user from localStorage
+        const userJson = localStorage.getItem('user');
+        if (userJson) {
+          try {
+            const user = JSON.parse(userJson);
+            if (user && user.email) {
+              this.connect(user.email);
+            }
+          } catch (error) {
+            console.error('Error parsing user JSON:', error);
+          }
         }
       }, this.reconnectInterval);
     } else {

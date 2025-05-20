@@ -8,6 +8,7 @@ from datetime import datetime
 
 from app.core.auth import get_current_active_user, verify_token
 from app.core.websocket import manager
+from app.core.db_utils import get_user_by_email
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -18,22 +19,41 @@ from app.schemas.sensor import SensorDataCreate
 router = APIRouter()
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Depends(get_db)):
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = None, email: str = None):
     # Initialize user variable
     user = None
 
     try:
-        # Verify token with detailed logging
-        logger.info(f"WebSocket connection attempt with token: {token[:10]}...")
-        user = verify_token(token, db)
+        # Check if we have an email parameter
+        if email:
+            # Authenticate using email
+            logger.info(f"WebSocket connection attempt with email: {email}")
+            user = get_user_by_email(db, email)
 
-        if not user:
-            logger.warning(f"WebSocket connection rejected: Invalid token")
+            if not user:
+                logger.warning(f"WebSocket connection rejected: Invalid email")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Log successful authentication
+            logger.info(f"WebSocket authenticated for user {user['id']} (email: {email})")
+        elif token:
+            # Fallback to token authentication
+            logger.info(f"WebSocket connection attempt with token: {token[:10]}...")
+            user = verify_token(token, db)
+
+            if not user:
+                logger.warning(f"WebSocket connection rejected: Invalid token")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Log successful authentication
+            logger.info(f"WebSocket authenticated for user {user['id']} (username: {user.get('username', 'unknown')})")
+        else:
+            # No authentication provided
+            logger.warning("WebSocket connection rejected: No authentication provided")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-
-        # Log successful authentication
-        logger.info(f"WebSocket authenticated for user {user['id']} (username: {user.get('username', 'unknown')})")
 
         # Accept connection through the manager
         await manager.connect(websocket, user['id'])
