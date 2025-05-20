@@ -167,12 +167,9 @@ void setupWebSocket() {
   Serial.print("🔗 Path: ");
   Serial.println(fullPath);
 
-  // IMPORTANT: Set insecure mode to bypass SSL certificate verification
-  // This is required for connecting to Render.com with self-signed certificates
-  webSocket.setInsecure();
-
   // Begin WebSocket connection with SSL
-  webSocket.beginSSL(websocket_host, websocket_port, fullPath.c_str());
+  // The last parameter 'true' skips certificate validation (insecure mode)
+  webSocket.beginSSL(websocket_host, websocket_port, fullPath.c_str(), "", true);
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(reconnectInterval);
   webSocket.enableHeartbeat(15000, 3000, 2);
