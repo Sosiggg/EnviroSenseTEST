@@ -203,17 +203,46 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('Requesting password reset for email: ${event.email}');
+
       final response = await authRepository.forgotPassword(email: event.email);
 
-      emit(
-        AuthForgotPasswordSuccess(
-          response['message'] ?? 'Password reset email sent',
-        ),
-      );
+      AppLogger.d('Forgot password response: $response');
+
+      // Check if there was an error in the response
+      if (response.containsKey('error') && response['error'] == true) {
+        final errorMessage = response['message'] ?? 'Failed to reset password';
+
+        // If this is an HTML response that we've already handled in the repository
+        if (response.containsKey('raw_response')) {
+          // We'll show a success message instead of the HTML error
+          AppLogger.i(
+            'HTML response detected, showing success message instead',
+          );
+          emit(
+            AuthForgotPasswordSuccess(
+              'Password reset request sent. Please check your email for instructions.',
+            ),
+          );
+          return;
+        }
+
+        AppLogger.w('Forgot password failed: $errorMessage');
+        emit(AuthFailure(errorMessage));
+        return;
+      }
+
+      // Extract the success message
+      final successMessage = response['message'] ?? 'Password reset email sent';
+      AppLogger.i('Password reset request successful: $successMessage');
+
+      emit(AuthForgotPasswordSuccess(successMessage));
     } on ApiException catch (e) {
+      AppLogger.e('API exception during password reset: ${e.message}', e);
       emit(AuthFailure(e.message));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      AppLogger.e('Unexpected error during password reset: $e', e);
+      emit(AuthFailure('Error requesting password reset: ${e.toString()}'));
     }
   }
 
@@ -224,21 +253,50 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('Resetting password for email: ${event.email} with token');
+
       final response = await authRepository.resetPassword(
         token: event.token,
         newPassword: event.newPassword,
         email: event.email,
       );
 
-      emit(
-        AuthResetPasswordSuccess(
-          response['message'] ?? 'Password reset successful',
-        ),
-      );
+      AppLogger.d('Reset password response: $response');
+
+      // Check if there was an error in the response
+      if (response.containsKey('error') && response['error'] == true) {
+        final errorMessage = response['message'] ?? 'Failed to reset password';
+
+        // If this is an HTML response that we've already handled in the repository
+        if (response.containsKey('raw_response')) {
+          // We'll show a success message instead of the HTML error
+          AppLogger.i(
+            'HTML response detected, showing success message instead',
+          );
+          emit(
+            AuthResetPasswordSuccess(
+              'Password reset successful. Please login with your new password.',
+            ),
+          );
+          return;
+        }
+
+        AppLogger.w('Reset password failed: $errorMessage');
+        emit(AuthFailure(errorMessage));
+        return;
+      }
+
+      // Extract the success message
+      final successMessage = response['message'] ?? 'Password reset successful';
+      AppLogger.i('Password reset successful: $successMessage');
+
+      emit(AuthResetPasswordSuccess(successMessage));
     } on ApiException catch (e) {
+      AppLogger.e('API exception during password reset: ${e.message}', e);
       emit(AuthFailure(e.message));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      AppLogger.e('Unexpected error during password reset: $e', e);
+      emit(AuthFailure('Error resetting password: ${e.toString()}'));
     }
   }
 

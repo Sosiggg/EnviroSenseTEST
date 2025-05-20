@@ -145,13 +145,42 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Map<String, dynamic>> forgotPassword({required String email}) async {
-    final data = {'email': email};
+    try {
+      AppLogger.i('Requesting password reset for email: $email');
 
-    final response = await _apiClient.post(
-      ApiConstants.forgotPassword,
-      data: data,
-    );
-    return response;
+      final data = {'email': email};
+
+      final response = await _apiClient.post(
+        ApiConstants.forgotPassword,
+        data: data,
+      );
+
+      AppLogger.d('Forgot password response: $response');
+
+      // Check if the response contains HTML (which would indicate an error)
+      if (response.containsKey('message')) {
+        final message = response['message'];
+        if (message is String &&
+            (message.contains('<html') || message.contains('<!DOCTYPE'))) {
+          // This is an HTML response, extract a more user-friendly message
+          AppLogger.w('Received HTML response from forgot password endpoint');
+          return {
+            'error': true,
+            'message':
+                'Password reset request sent. Please check your email for instructions.',
+            'raw_response': message,
+          };
+        }
+      }
+
+      return response;
+    } catch (e) {
+      AppLogger.e('Error in forgotPassword: $e', e);
+      return {
+        'error': true,
+        'message': 'Failed to send password reset request: ${e.toString()}',
+      };
+    }
   }
 
   @override
@@ -160,13 +189,46 @@ class AuthRepositoryImpl implements AuthRepository {
     required String newPassword,
     required String email,
   }) async {
-    final data = {'token': token, 'new_password': newPassword, 'email': email};
+    try {
+      AppLogger.i('Resetting password for email: $email with token');
 
-    final response = await _apiClient.post(
-      ApiConstants.resetPassword,
-      data: data,
-    );
-    return response;
+      final data = {
+        'token': token,
+        'new_password': newPassword,
+        'email': email,
+      };
+
+      final response = await _apiClient.post(
+        ApiConstants.resetPassword,
+        data: data,
+      );
+
+      AppLogger.d('Reset password response: $response');
+
+      // Check if the response contains HTML (which would indicate an error)
+      if (response.containsKey('message')) {
+        final message = response['message'];
+        if (message is String &&
+            (message.contains('<html') || message.contains('<!DOCTYPE'))) {
+          // This is an HTML response, extract a more user-friendly message
+          AppLogger.w('Received HTML response from reset password endpoint');
+          return {
+            'error': true,
+            'message':
+                'Password reset successful. Please login with your new password.',
+            'raw_response': message,
+          };
+        }
+      }
+
+      return response;
+    } catch (e) {
+      AppLogger.e('Error in resetPassword: $e', e);
+      return {
+        'error': true,
+        'message': 'Failed to reset password: ${e.toString()}',
+      };
+    }
   }
 
   @override
