@@ -35,10 +35,14 @@ class SensorRepositoryImpl implements SensorRepository {
       }
 
       // If we get here, check if the response itself is a list
-      if (response is List<dynamic>) {
+      if (response is List) {
         AppLogger.i('Found direct list format, using it directly');
         final result = <Map<String, dynamic>>[];
-        for (final dynamic item in response) {
+
+        // Cast to Iterable<dynamic> to avoid type errors
+        final items = response as Iterable<dynamic>;
+
+        for (final dynamic item in items) {
           if (item is Map<String, dynamic>) {
             result.add(item);
           } else if (item is Map) {
@@ -127,10 +131,14 @@ class SensorRepositoryImpl implements SensorRepository {
       }
 
       // If we get here, check if the response itself is a list
-      if (response is List<dynamic>) {
+      if (response is List) {
         AppLogger.i('Found direct list format, using it directly');
         final result = <Map<String, dynamic>>[];
-        for (final dynamic item in response) {
+
+        // Cast to Iterable<dynamic> to avoid type errors
+        final items = response as Iterable<dynamic>;
+
+        for (final dynamic item in items) {
           if (item is Map<String, dynamic>) {
             result.add(item);
           } else if (item is Map) {
