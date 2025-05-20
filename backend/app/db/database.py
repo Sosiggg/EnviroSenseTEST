@@ -23,29 +23,36 @@ if DATABASE_URL.startswith("sqlite"):
 else:
     # For PostgreSQL on Render with optimized connection pool settings
     try:
+        # Use even more conservative connection pool settings to avoid hitting limits
         engine = create_engine(
             DATABASE_URL,
             poolclass=QueuePool,
-            pool_size=5,  # Reduced to avoid hitting connection limits
-            max_overflow=10,  # Reduced to avoid hitting connection limits
-            pool_timeout=60,  # Increased from default 30
-            pool_recycle=1800,  # Recycle connections after 30 minutes
+            pool_size=3,  # Further reduced to avoid hitting connection limits
+            max_overflow=5,  # Further reduced to avoid hitting connection limits
+            pool_timeout=90,  # Increased timeout to allow for longer queries
+            pool_recycle=900,  # Recycle connections after 15 minutes
             pool_pre_ping=True,  # Check connection validity before using it
-            connect_args={"connect_timeout": 10}  # Add connection timeout
+            connect_args={
+                "connect_timeout": 15,  # Increased connection timeout
+                "keepalives": 1,  # Enable keepalives
+                "keepalives_idle": 60,  # Idle time before sending keepalive
+                "keepalives_interval": 10,  # Interval between keepalives
+                "keepalives_count": 3  # Number of keepalives before giving up
+            }
         )
-        logger.info(f"Database engine created with pool_size=5, max_overflow=10, pool_timeout=60")
+        logger.info(f"Database engine created with pool_size=3, max_overflow=5, pool_timeout=90, pool_recycle=900")
     except Exception as e:
         logger.error(f"Error creating database engine: {e}")
         # Fallback to minimal settings
         engine = create_engine(
             DATABASE_URL,
             poolclass=QueuePool,
-            pool_size=2,
-            max_overflow=5,
+            pool_size=1,  # Absolute minimum
+            max_overflow=2,  # Absolute minimum overflow
             pool_timeout=30,
             pool_pre_ping=True
         )
-        logger.warning(f"Using fallback database engine settings due to error")
+        logger.warning(f"Using fallback database engine settings due to error: {e}")
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

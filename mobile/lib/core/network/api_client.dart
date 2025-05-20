@@ -327,5 +327,31 @@ class ApiClient {
     // await _secureStorage.delete(key: 'token');
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+
+    // Also clear any cached token in memory
+    if (kDebugMode) {
+      print('API Client: Clearing cached token');
+    }
+
+    // Reset the Dio instance to clear any cached headers
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: ApiConstants.baseUrl,
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        validateStatus: (status) => true,
+      ),
+    );
+
+    // Re-add logging interceptor in debug mode
+    if (kDebugMode) {
+      _dio.interceptors.add(
+        LogInterceptor(requestBody: true, responseBody: true),
+      );
+    }
   }
 }

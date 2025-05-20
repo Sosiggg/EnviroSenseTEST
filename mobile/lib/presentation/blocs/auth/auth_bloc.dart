@@ -307,12 +307,49 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      // Note: WebSocket disconnection is now handled in the HomePage before this event is dispatched
+      // This ensures that the WebSocket is properly disconnected before the token is cleared
+
+      // Clear the token and any cached user data
       await authRepository.clearToken();
+
+      // Clear any cached user data in the API client
+      await authRepository.clearUserCache();
+
+      AppLogger.i('User logged out successfully - all user data cleared');
+
+      // Emit unauthenticated state to trigger navigation to login screen
       emit(const AuthUnauthenticated());
     } on ApiException catch (e) {
+      AppLogger.e('API exception during logout: ${e.message}', e);
       emit(AuthFailure(e.message));
+
+      // Even if there's an error, still try to clear the token and emit unauthenticated state
+      try {
+        await authRepository.clearToken();
+        await authRepository.clearUserCache();
+        emit(const AuthUnauthenticated());
+      } catch (clearError) {
+        AppLogger.e(
+          'Error clearing token after failed logout: $clearError',
+          clearError,
+        );
+      }
     } catch (e) {
+      AppLogger.e('Unexpected error during logout: $e', e);
       emit(AuthFailure(e.toString()));
+
+      // Even if there's an error, still try to clear the token and emit unauthenticated state
+      try {
+        await authRepository.clearToken();
+        await authRepository.clearUserCache();
+        emit(const AuthUnauthenticated());
+      } catch (clearError) {
+        AppLogger.e(
+          'Error clearing token after failed logout: $clearError',
+          clearError,
+        );
+      }
     }
   }
 

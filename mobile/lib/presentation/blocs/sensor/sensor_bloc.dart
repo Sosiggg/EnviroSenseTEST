@@ -232,12 +232,16 @@ class SensorBloc extends Bloc<SensorEvent, SensorState> {
     }
   }
 
-  void _onSensorDataClearRequested(
+  Future<void> _onSensorDataClearRequested(
     SensorDataClearRequested event,
     Emitter<SensorState> emit,
-  ) {
+  ) async {
     try {
       AppLogger.i('SensorBloc: Clearing all sensor data');
+
+      // Cancel existing subscription if any
+      await _sensorDataSubscription?.cancel();
+      _sensorDataSubscription = null;
 
       // Emit initial state to clear any cached data
       emit(const SensorInitial());

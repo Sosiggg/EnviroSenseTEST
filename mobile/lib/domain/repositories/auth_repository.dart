@@ -48,4 +48,7 @@ abstract class AuthRepository {
 
   /// Clear token (logout)
   Future<void> clearToken();
+
+  /// Clear any cached user data
+  Future<void> clearUserCache();
 }

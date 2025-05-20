@@ -33,7 +33,14 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
 
-    // Get user profile
+    // Clear any existing user data
+    setState(() {
+      _user = null;
+      _usernameController.clear();
+      _emailController.clear();
+    });
+
+    // Get fresh user profile data
     context.read<AuthBloc>().add(const AuthGetUserProfileRequested());
   }
 
@@ -138,11 +145,21 @@ class _ProfilePageState extends State<ProfilePage> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is AuthAuthenticated) {
-          setState(() {
-            _user = state.user;
-            _usernameController.text = state.user.username;
-            _emailController.text = state.user.email;
-          });
+          // Only update if the user is different or null
+          if (_user == null ||
+              _user!.id != state.user.id ||
+              _user!.username != state.user.username) {
+            setState(() {
+              _user = state.user;
+              _usernameController.text = state.user.username;
+              _emailController.text = state.user.email;
+            });
+
+            // Log the user data update
+            debugPrint(
+              'Profile page: Updated user data for ${state.user.username} (ID: ${state.user.id})',
+            );
+          }
         } else if (state is AuthProfileUpdateSuccess) {
           setState(() {
             _user = state.user;
@@ -171,6 +188,13 @@ class _ProfilePageState extends State<ProfilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.message), backgroundColor: Colors.red),
           );
+        } else if (state is AuthUnauthenticated) {
+          // Clear user data if unauthenticated
+          setState(() {
+            _user = null;
+            _usernameController.clear();
+            _emailController.clear();
+          });
         }
       },
       child: Scaffold(

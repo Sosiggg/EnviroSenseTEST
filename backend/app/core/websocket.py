@@ -30,19 +30,49 @@ class ConnectionManager:
         if user_id not in self.active_connections:
             self.active_connections[user_id] = []
 
+        # Log existing connections for this user
+        logger.info(f"User {user_id} has {len(self.active_connections[user_id])} existing connections before adding new one")
+
         # Check if user has too many connections
         if len(self.active_connections[user_id]) >= self.max_connections_per_user:
             # Remove the oldest connection for this user
             oldest_conn = self.active_connections[user_id][0]
             try:
+                logger.info(f"Closing oldest connection for user {user_id} due to connection limit")
                 await oldest_conn.close(code=1000, reason="Too many connections")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Error closing oldest connection: {e}")
+
             self.active_connections[user_id].pop(0)
             self.connection_count -= 1
             if oldest_conn in self.connection_timestamps:
                 del self.connection_timestamps[oldest_conn]
             logger.warning(f"Closed oldest connection for user {user_id} due to connection limit")
+
+        # Check for any stale connections for this user and close them
+        current_time = time.time()
+        stale_threshold = current_time - 300  # 5 minutes
+
+        stale_connections = []
+        for conn in self.active_connections[user_id]:
+            if conn in self.connection_timestamps and self.connection_timestamps[conn] < stale_threshold:
+                stale_connections.append(conn)
+
+        # Close stale connections
+        for stale_conn in stale_connections:
+            try:
+                logger.info(f"Closing stale connection for user {user_id}")
+                await stale_conn.close(code=1000, reason="Connection timeout")
+            except Exception as e:
+                logger.warning(f"Error closing stale connection: {e}")
+
+            self.active_connections[user_id].remove(stale_conn)
+            self.connection_count -= 1
+            if stale_conn in self.connection_timestamps:
+                del self.connection_timestamps[stale_conn]
+
+        if stale_connections:
+            logger.info(f"Closed {len(stale_connections)} stale connections for user {user_id}")
 
         # Add the new connection
         self.active_connections[user_id].append(websocket)
@@ -50,33 +80,64 @@ class ConnectionManager:
         self.connection_count += 1
 
         # Log connection
-        logger.info(f"WebSocket connected: User ID {user_id} | Total connections: {self.connection_count}")
+        logger.info(f"WebSocket connected: User ID {user_id} | Total connections: {self.connection_count} | User connections: {len(self.active_connections[user_id])}")
 
         # Send welcome message
         await self.send_personal_message(
             json.dumps({
                 "status": "connected",
                 "message": "Connected to EnviroSense WebSocket server",
-                "connections": self.connection_count
+                "connections": self.connection_count,
+                "user_connections": len(self.active_connections[user_id]),
+                "user_id": user_id
             }),
             websocket
         )
 
     def disconnect(self, websocket: WebSocket, user_id: int):
-        if user_id in self.active_connections:
-            if websocket in self.active_connections[user_id]:
-                self.active_connections[user_id].remove(websocket)
-                self.connection_count -= 1
+        """Disconnect a WebSocket connection and clean up resources"""
+        try:
+            # Log the disconnect attempt
+            logger.info(f"Disconnecting WebSocket for user {user_id}")
 
-                # Remove from timestamps
-                if websocket in self.connection_timestamps:
-                    del self.connection_timestamps[websocket]
+            if user_id in self.active_connections:
+                # Check if this specific websocket is in the user's connections
+                if websocket in self.active_connections[user_id]:
+                    # Remove the connection
+                    self.active_connections[user_id].remove(websocket)
+                    self.connection_count -= 1
 
-                # Log disconnection
-                logger.info(f"WebSocket disconnected: User ID {user_id} | Total connections: {self.connection_count}")
+                    # Remove from timestamps
+                    if websocket in self.connection_timestamps:
+                        del self.connection_timestamps[websocket]
 
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
+                    # Log disconnection
+                    logger.info(f"WebSocket disconnected: User ID {user_id} | Total connections: {self.connection_count} | User connections: {len(self.active_connections[user_id])}")
+                else:
+                    logger.warning(f"WebSocket not found in user {user_id}'s connections during disconnect")
+
+                # If this was the last connection for this user, clean up the user entry
+                if not self.active_connections[user_id]:
+                    del self.active_connections[user_id]
+                    logger.info(f"Removed user {user_id} from active connections (no more connections)")
+            else:
+                logger.warning(f"User {user_id} not found in active connections during disconnect")
+
+            # Try to close the websocket if it's not already closed
+            try:
+                # This is an async operation but we're in a sync method, so we can't await it
+                # We'll just try to close it and ignore any errors
+                websocket.close()
+            except Exception as e:
+                logger.debug(f"Error closing websocket during disconnect: {e}")
+
+        except Exception as e:
+            # Catch any errors during disconnect to prevent crashes
+            logger.error(f"Error during WebSocket disconnect for user {user_id}: {e}")
+
+        # Final check - make sure the connection is removed from timestamps even if other steps failed
+        if websocket in self.connection_timestamps:
+            del self.connection_timestamps[websocket]
 
     async def _cleanup_stale_connections(self):
         """Clean up stale connections periodically"""

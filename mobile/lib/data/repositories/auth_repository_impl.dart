@@ -1,5 +1,7 @@
 // import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
+import 'dart:convert';
+
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -233,8 +235,45 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Map<String, dynamic>> getUserProfile() async {
-    final response = await _apiClient.get(ApiConstants.userProfile);
-    return response;
+    try {
+      AppLogger.i('Getting user profile');
+
+      // Get the current token to identify the user
+      final token = await getToken();
+      if (token == null) {
+        AppLogger.w('No token available when getting user profile');
+        return {'error': true, 'message': 'Not authenticated'};
+      }
+
+      // Make the API request to get the latest profile data
+      final response = await _apiClient.get(ApiConstants.userProfile);
+
+      // Check if the response is valid
+      if (response.containsKey('error') && response['error'] == true) {
+        AppLogger.w('Error in user profile response: ${response['message']}');
+        return response;
+      }
+
+      // Cache the profile data with the token as part of the key
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final tokenFirstPart =
+            token.split('.').first; // Use part of the token as an identifier
+        await prefs.setString(
+          'user_profile_$tokenFirstPart',
+          jsonEncode(response),
+        );
+        AppLogger.d('User profile cached successfully');
+      } catch (cacheError) {
+        AppLogger.w('Error caching user profile: $cacheError');
+        // Continue even if caching fails
+      }
+
+      return response;
+    } catch (e) {
+      AppLogger.e('Error getting user profile: $e', e);
+      return {'error': true, 'message': 'Failed to get user profile: $e'};
+    }
   }
 
   @override
@@ -344,5 +383,40 @@ class AuthRepositoryImpl implements AuthRepository {
     // await _secureStorage.delete(key: 'token');
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+
+    // Also clear the token in the API client
+    await _apiClient.clearToken();
+  }
+
+  @override
+  Future<void> clearUserCache() async {
+    try {
+      // Get the current token to identify user-specific cache entries
+      final token = await getToken();
+      final prefs = await SharedPreferences.getInstance();
+
+      if (token != null) {
+        // Clear user-specific cache entries
+        final tokenFirstPart = token.split('.').first;
+        await prefs.remove('user_profile_$tokenFirstPart');
+        AppLogger.i('User-specific cache cleared for token: $tokenFirstPart');
+      }
+
+      // Clear any other user-related cache entries
+      // Get all keys and remove those that start with 'user_profile_'
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('user_profile_')) {
+          await prefs.remove(key);
+          AppLogger.d('Removed cached data for key: $key');
+        }
+      }
+
+      // Log the cache clearing
+      AppLogger.i('All user cache cleared successfully');
+    } catch (e) {
+      AppLogger.e('Error clearing user cache: $e', e);
+      // Continue even if there's an error
+    }
   }
 }

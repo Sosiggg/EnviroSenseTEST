@@ -51,10 +51,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _logout() {
-    // First clear sensor data
+    // First disconnect WebSocket
+    context.read<SensorBloc>().add(const SensorWebSocketDisconnectRequested());
+
+    // Then clear sensor data
     context.read<SensorBloc>().add(const SensorDataClearRequested());
 
-    // Then logout
+    // Finally logout
     context.read<AuthBloc>().add(const AuthLogoutRequested());
   }
 
