@@ -17,19 +17,18 @@ const char* websocket_path = "/api/v1/sensor/ws"; // This should match your back
 const char* user_email = "ivi.salski.35@gmail.com";
 
 // DHT Sensor
-#define DHTPIN 4
-#define DHTTYPE DHT22
+#define DHTPIN 13       // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT22   // DHT 22 (AM2302)
 DHT dht(DHTPIN, DHTTYPE);
 
-// Ultrasonic Sensor
-#define TRIG_PIN 5
-#define ECHO_PIN 18
-const int OBSTACLE_THRESHOLD = 30;
+// IR Tracker Sensor
+#define IR_SENSOR_PIN 15
+const int OBSTACLE_THRESHOLD = 30;  // Adjust this value based on your sensor's sensitivity
 
 // LED Indicators
-#define WIFI_LED 2
-#define SENSOR_LED 15
-#define ERROR_LED 13
+#define WIFI_LED 2      // Blue LED for WiFi status
+#define SENSOR_LED 12   // Green LED for sensor readings
+#define ERROR_LED 14    // Red LED for errors
 
 WebSocketsClient webSocket;
 
@@ -61,8 +60,7 @@ void setup() {
   digitalWrite(ERROR_LED, LOW);
 
   // Sensor Pin Setup
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
+  pinMode(IR_SENSOR_PIN, INPUT);
   dht.begin();
 
   connectToWiFi();
@@ -306,19 +304,18 @@ void readAndSendSensorData() {
 }
 
 // ----------------------------------
-// Ultrasonic Distance
+// IR Sensor for Obstacle Detection
 // ----------------------------------
 bool readObstacle() {
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+  // Read the IR sensor value
+  int sensorValue = digitalRead(IR_SENSOR_PIN);
 
-  long duration = pulseIn(ECHO_PIN, HIGH);
-  int distance = duration * 0.034 / 2;
+  // For most IR obstacle sensors:
+  // LOW (0) means obstacle detected
+  // HIGH (1) means no obstacle
 
-  return distance < OBSTACLE_THRESHOLD;
+  // Return true if obstacle is detected
+  return sensorValue == LOW;
 }
 
 // ----------------------------------
