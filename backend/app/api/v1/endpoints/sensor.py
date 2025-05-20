@@ -22,8 +22,13 @@ router = APIRouter()
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = None, email: str = None):
     # Initialize user variable
     user = None
+    client_host = websocket.client.host if hasattr(websocket, 'client') and hasattr(websocket.client, 'host') else "unknown"
 
     try:
+        # Log connection attempt with client info
+        logger.info(f"WebSocket connection attempt from {client_host}")
+        logger.info(f"WebSocket connection parameters - token: {'provided' if token else 'not provided'}, email: {email if email else 'not provided'}")
+
         # Check if we have an email parameter
         if email:
             # Authenticate using email
@@ -31,27 +36,27 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             user = get_user_by_email(db, email)
 
             if not user:
-                logger.warning(f"WebSocket connection rejected: Invalid email")
+                logger.warning(f"WebSocket connection rejected: Invalid email '{email}' from {client_host}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
             # Log successful authentication
-            logger.info(f"WebSocket authenticated for user {user['id']} (email: {email})")
+            logger.info(f"WebSocket authenticated for user {user.id if hasattr(user, 'id') else user['id']} (email: {email}) from {client_host}")
         elif token:
             # Fallback to token authentication
-            logger.info(f"WebSocket connection attempt with token: {token[:10]}...")
+            logger.info(f"WebSocket connection attempt with token: {token[:10]}... from {client_host}")
             user = verify_token(token, db)
 
             if not user:
-                logger.warning(f"WebSocket connection rejected: Invalid token")
+                logger.warning(f"WebSocket connection rejected: Invalid token from {client_host}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
             # Log successful authentication
-            logger.info(f"WebSocket authenticated for user {user['id']} (username: {user.get('username', 'unknown')})")
+            logger.info(f"WebSocket authenticated for user {user.id if hasattr(user, 'id') else user['id']} (username: {user.get('username', 'unknown')}) from {client_host}")
         else:
             # No authentication provided
-            logger.warning("WebSocket connection rejected: No authentication provided")
+            logger.warning(f"WebSocket connection rejected: No authentication provided from {client_host}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
