@@ -21,19 +21,50 @@ class SensorRepositoryImpl implements SensorRepository {
 
   @override
   Future<List<Map<String, dynamic>>> getSensorData() async {
-    final response = await _apiClient.get(ApiConstants.sensorData);
+    try {
+      final response = await _apiClient.get(ApiConstants.sensorData);
 
-    if (response is List) {
-      return response.cast<Map<String, dynamic>>();
+      // Check if the response contains data in the expected format
+      if (response.containsKey('data') && response['data'] is List) {
+        // Convert the list to the expected format
+        return List<Map<String, dynamic>>.from(response['data']);
+      } else if (response.containsKey('message')) {
+        // Log the message but return empty list
+        AppLogger.w('API message: ${response['message']}');
+        return [];
+      }
+
+      // If we get here, the response is not in the expected format
+      AppLogger.w('Unexpected response format: $response');
+      return [];
+    } catch (e) {
+      AppLogger.e('Error getting sensor data: $e', e);
+      return [];
     }
-
-    return [];
   }
 
   @override
   Future<Map<String, dynamic>> getLatestSensorData() async {
-    final response = await _apiClient.get(ApiConstants.latestSensorData);
-    return response;
+    try {
+      final response = await _apiClient.get(ApiConstants.latestSensorData);
+
+      // Check if the response contains data in the expected format
+      if (response.containsKey('data') && response['data'] is Map) {
+        // Return the data directly
+        return Map<String, dynamic>.from(response['data']);
+      } else if (response.containsKey('message')) {
+        // Log the message but return empty map
+        AppLogger.w('API message: ${response['message']}');
+        return {};
+      }
+
+      // If we get here, the response is not in the expected format
+      AppLogger.w('Unexpected response format: $response');
+      return response; // Return the raw response as a fallback
+    } catch (e) {
+      AppLogger.e('Error getting latest sensor data: $e', e);
+      return {};
+    }
   }
 
   @override
@@ -41,27 +72,58 @@ class SensorRepositoryImpl implements SensorRepository {
     required DateTime startDate,
     required DateTime endDate,
   }) async {
-    final queryParameters = {
-      'start_date': startDate.toIso8601String(),
-      'end_date': endDate.toIso8601String(),
-    };
+    try {
+      final queryParameters = {
+        'start_date': startDate.toIso8601String(),
+        'end_date': endDate.toIso8601String(),
+      };
 
-    final response = await _apiClient.get(
-      ApiConstants.sensorData,
-      queryParameters: queryParameters,
-    );
+      final response = await _apiClient.get(
+        ApiConstants.sensorData,
+        queryParameters: queryParameters,
+      );
 
-    if (response is List) {
-      return response.cast<Map<String, dynamic>>();
+      // Check if the response contains data in the expected format
+      if (response.containsKey('data') && response['data'] is List) {
+        // Convert the list to the expected format
+        return List<Map<String, dynamic>>.from(response['data']);
+      } else if (response.containsKey('message')) {
+        // Log the message but return empty list
+        AppLogger.w('API message: ${response['message']}');
+        return [];
+      }
+
+      // If we get here, the response is not in the expected format
+      AppLogger.w('Unexpected response format: $response');
+      return [];
+    } catch (e) {
+      AppLogger.e('Error getting sensor data by date range: $e', e);
+      return [];
     }
-
-    return [];
   }
 
   @override
   Future<Map<String, dynamic>> getSensorDataStatistics() async {
-    final response = await _apiClient.get(ApiConstants.sensorDataStatistics);
-    return response;
+    try {
+      final response = await _apiClient.get(ApiConstants.sensorDataStatistics);
+
+      // Check if the response contains data in the expected format
+      if (response.containsKey('data') && response['data'] is Map) {
+        // Return the data directly
+        return Map<String, dynamic>.from(response['data']);
+      } else if (response.containsKey('message')) {
+        // Log the message but return empty map
+        AppLogger.w('API message: ${response['message']}');
+        return {};
+      }
+
+      // If we get here, the response is not in the expected format
+      AppLogger.w('Unexpected response format: $response');
+      return response; // Return the raw response as a fallback
+    } catch (e) {
+      AppLogger.e('Error getting sensor data statistics: $e', e);
+      return {};
+    }
   }
 
   // Timer for reconnection attempts
