@@ -168,8 +168,8 @@ void setupWebSocket() {
   Serial.println(fullPath);
 
   // Begin WebSocket connection with SSL
-  // The last parameter 'true' skips certificate validation (insecure mode)
-  webSocket.beginSSL(websocket_host, websocket_port, fullPath.c_str(), "", true);
+  // Empty fingerprint means it will accept any certificate
+  webSocket.beginSSL(websocket_host, websocket_port, fullPath.c_str(), "");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(reconnectInterval);
   webSocket.enableHeartbeat(15000, 3000, 2);
