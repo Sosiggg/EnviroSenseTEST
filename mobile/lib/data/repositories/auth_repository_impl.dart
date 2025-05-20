@@ -85,14 +85,57 @@ class AuthRepositoryImpl implements AuthRepository {
           final response = dioResponse.data;
           AppLogger.i('Login response status: ${dioResponse.statusCode}');
 
-          if (response != null && response['access_token'] != null) {
-            await saveToken(response['access_token']);
-            AppLogger.i('Token saved successfully');
-            return response;
+          // Safely handle the response data
+          Map<String, dynamic> responseMap;
+
+          if (response is Map<String, dynamic>) {
+            // Response is already a Map
+            responseMap = response;
+          } else if (response is String) {
+            try {
+              // Try to parse the string as JSON
+              responseMap = json.decode(response) as Map<String, dynamic>;
+            } catch (e) {
+              // If parsing fails, create a simple map with the string as a message
+              responseMap = {
+                'error': true,
+                'message': 'Invalid response format: $response',
+              };
+            }
+          } else if (response == null) {
+            // Handle null response
+            responseMap = {
+              'error': true,
+              'message': 'Empty response from server',
+            };
+          } else {
+            // Handle other types
+            responseMap = {
+              'error': true,
+              'message': 'Unexpected response type: ${response.runtimeType}',
+            };
+          }
+
+          // Check for access token in the processed response
+          if (responseMap.containsKey('access_token') &&
+              responseMap['access_token'] != null) {
+            try {
+              final token = responseMap['access_token'].toString();
+              await saveToken(token);
+              AppLogger.i('Token saved successfully');
+              return responseMap;
+            } catch (e) {
+              AppLogger.e('Error saving token: $e', e);
+              return {
+                'error': true,
+                'message': 'Error saving authentication token: ${e.toString()}',
+              };
+            }
           } else {
             AppLogger.w('Login failed: ${dioResponse.statusMessage}');
-            return response ??
-                {
+            return responseMap.containsKey('error')
+                ? responseMap
+                : {
                   'error': true,
                   'message': 'Login failed: ${dioResponse.statusMessage}',
                 };
@@ -248,10 +291,31 @@ class AuthRepositoryImpl implements AuthRepository {
       // Make the API request to get the latest profile data
       final response = await _apiClient.get(ApiConstants.userProfile);
 
-      // Check if the response is valid
+      // Log the response for debugging
+      AppLogger.d('User profile response: $response');
+
+      // Check if the response indicates an error
       if (response.containsKey('error') && response['error'] == true) {
         AppLogger.w('Error in user profile response: ${response['message']}');
         return response;
+      }
+
+      // Validate that the response contains expected user data
+      if (!response.containsKey('id') && !response.containsKey('username')) {
+        AppLogger.w('Response missing required user data fields');
+        return {'error': true, 'message': 'Invalid user profile data'};
+      }
+
+      // Ensure ID is properly handled
+      if (response.containsKey('id') && response['id'] is String) {
+        // Convert string ID to int if possible
+        try {
+          final idInt = int.parse(response['id']);
+          response['id'] = idInt;
+        } catch (e) {
+          AppLogger.w('Could not parse user ID as integer: ${response['id']}');
+          // Keep the string ID, the User.fromJson will handle it
+        }
       }
 
       // Cache the profile data with the token as part of the key
