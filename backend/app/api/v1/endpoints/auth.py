@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import timedelta, datetime, timezone
 from pydantic import BaseModel, EmailStr
 import secrets
@@ -71,14 +72,14 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me")
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(current_user: dict = Depends(get_current_active_user)):
     try:
-        # Return a dictionary instead of the User object
+        # Return the user dictionary directly
         return {
-            "id": current_user.id,
-            "username": current_user.username,
-            "email": current_user.email,
-            "is_active": current_user.is_active
+            "id": current_user['id'],
+            "username": current_user['username'],
+            "email": current_user['email'],
+            "is_active": current_user['is_active']
         }
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
@@ -90,35 +91,49 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 @router.put("/me")
 async def update_user_profile(
     user_update: UserUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     try:
         # Check if username is being changed and if it already exists
-        if user_update.username != current_user.username:
-            db_user = db.query(User).filter(User.username == user_update.username).first()
-            if db_user:
+        if user_update.username != current_user['username']:
+            # Use raw SQL to check if username exists
+            query = text("""
+                SELECT id FROM users WHERE username = :username LIMIT 1
+            """)
+            result = db.execute(query, {"username": user_update.username})
+            if result.fetchone():
                 raise HTTPException(status_code=400, detail="Username already exists")
 
         # Check if email is being changed and if it already exists
-        if user_update.email != current_user.email:
-            db_email = db.query(User).filter(User.email == user_update.email).first()
-            if db_email:
+        if user_update.email != current_user['email']:
+            # Use raw SQL to check if email exists
+            query = text("""
+                SELECT id FROM users WHERE email = :email LIMIT 1
+            """)
+            result = db.execute(query, {"email": user_update.email})
+            if result.fetchone():
                 raise HTTPException(status_code=400, detail="Email already exists")
 
-        # Update user
-        current_user.username = user_update.username
-        current_user.email = user_update.email
-
+        # Update user with raw SQL
+        query = text("""
+            UPDATE users
+            SET username = :username, email = :email
+            WHERE id = :user_id
+        """)
+        db.execute(query, {
+            "username": user_update.username,
+            "email": user_update.email,
+            "user_id": current_user['id']
+        })
         db.commit()
-        db.refresh(current_user)
 
-        # Return a dictionary instead of the User object
+        # Return updated user data
         return {
-            "id": current_user.id,
-            "username": current_user.username,
-            "email": current_user.email,
-            "is_active": current_user.is_active
+            "id": current_user['id'],
+            "username": user_update.username,
+            "email": user_update.email,
+            "is_active": current_user['is_active']
         }
     except Exception as e:
         logger.error(f"Error updating user profile: {e}")
@@ -130,18 +145,36 @@ async def update_user_profile(
 @router.post("/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
     password_change: PasswordChange,
-    current_user: User = Depends(get_current_active_user),
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Verify current password
-    if not verify_password(password_change.current_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect current password")
+    try:
+        # Verify current password
+        if not verify_password(password_change.current_password, current_user['hashed_password']):
+            raise HTTPException(status_code=400, detail="Incorrect current password")
 
-    # Update password
-    current_user.hashed_password = get_password_hash(password_change.new_password)
-    db.commit()
+        # Generate new password hash
+        hashed_password = get_password_hash(password_change.new_password)
 
-    return {"message": "Password changed successfully"}
+        # Update password using raw SQL
+        query = text("""
+            UPDATE users
+            SET hashed_password = :hashed_password
+            WHERE id = :user_id
+        """)
+        db.execute(query, {
+            "hashed_password": hashed_password,
+            "user_id": current_user['id']
+        })
+        db.commit()
+
+        return {"message": "Password changed successfully"}
+    except Exception as e:
+        logger.error(f"Error changing password: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while changing the password: {str(e)}"
+        )
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 async def forgot_password(

@@ -86,19 +86,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if user_dict is None:
         raise credentials_exception
 
-    # Convert dictionary to User object for compatibility
-    user = User(
-        id=user_dict['id'],
-        username=user_dict['username'],
-        email=user_dict['email'],
-        hashed_password=user_dict['hashed_password'],
-        is_active=user_dict['is_active']
-    )
-    return user
+    # Return the user dictionary directly
+    return user_dict
 
 # Get current active user
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    if not current_user.is_active:
+async def get_current_active_user(current_user: dict = Depends(get_current_user)):
+    if not current_user['is_active']:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
@@ -118,12 +111,5 @@ def verify_token(token: str, db: Session):
     if user_dict is None:
         return None
 
-    # Convert dictionary to User object for compatibility
-    user = User(
-        id=user_dict['id'],
-        username=user_dict['username'],
-        email=user_dict['email'],
-        hashed_password=user_dict['hashed_password'],
-        is_active=user_dict['is_active']
-    )
-    return user
+    # Return the user dictionary directly
+    return user_dict
