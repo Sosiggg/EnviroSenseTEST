@@ -47,8 +47,8 @@ def get_db():
     for attempt in range(retries):
         try:
             db = SessionLocal()
-            # Test the connection with a simple query
-            db.execute("SELECT 1")
+            # No need to test the connection - SQLAlchemy will do this automatically
+            # with pool_pre_ping=True
 
             try:
                 yield db

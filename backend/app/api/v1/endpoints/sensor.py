@@ -54,11 +54,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
                     )
 
                     # Save sensor data to database using raw SQL
-                    query = text("""
-                        INSERT INTO sensor_data (temperature, humidity, obstacle, user_id, timestamp)
-                        VALUES (:temperature, :humidity, :obstacle, :user_id, NOW())
-                        RETURNING id, timestamp
-                    """)
+                    query = text("INSERT INTO sensor_data (temperature, humidity, obstacle, user_id, timestamp) VALUES (:temperature, :humidity, :obstacle, :user_id, NOW()) RETURNING id, timestamp")
 
                     result = db.execute(query, {
                         "temperature": sensor_data.temperature,
@@ -131,12 +127,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
 async def get_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
     try:
         # Use raw SQL to get sensor data
-        query = text("""
-            SELECT id, temperature, humidity, obstacle, user_id, timestamp
-            FROM sensor_data
-            WHERE user_id = :user_id
-            ORDER BY timestamp DESC
-        """)
+        query = text("SELECT id, temperature, humidity, obstacle, user_id, timestamp FROM sensor_data WHERE user_id = :user_id ORDER BY timestamp DESC")
 
         result = db.execute(query, {"user_id": current_user['id']})
 
@@ -165,13 +156,7 @@ async def get_latest_sensor_data(current_user: dict = Depends(get_current_active
     """Get the latest sensor data for the current user"""
     try:
         # Use raw SQL to get latest sensor data
-        query = text("""
-            SELECT id, temperature, humidity, obstacle, user_id, timestamp
-            FROM sensor_data
-            WHERE user_id = :user_id
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """)
+        query = text("SELECT id, temperature, humidity, obstacle, user_id, timestamp FROM sensor_data WHERE user_id = :user_id ORDER BY timestamp DESC LIMIT 1")
 
         result = db.execute(query, {"user_id": current_user['id']})
         row = result.fetchone()

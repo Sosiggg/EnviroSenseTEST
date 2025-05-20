@@ -98,9 +98,7 @@ async def update_user_profile(
         # Check if username is being changed and if it already exists
         if user_update.username != current_user['username']:
             # Use raw SQL to check if username exists
-            query = text("""
-                SELECT id FROM users WHERE username = :username LIMIT 1
-            """)
+            query = text("SELECT id FROM users WHERE username = :username LIMIT 1")
             result = db.execute(query, {"username": user_update.username})
             if result.fetchone():
                 raise HTTPException(status_code=400, detail="Username already exists")
@@ -108,19 +106,13 @@ async def update_user_profile(
         # Check if email is being changed and if it already exists
         if user_update.email != current_user['email']:
             # Use raw SQL to check if email exists
-            query = text("""
-                SELECT id FROM users WHERE email = :email LIMIT 1
-            """)
+            query = text("SELECT id FROM users WHERE email = :email LIMIT 1")
             result = db.execute(query, {"email": user_update.email})
             if result.fetchone():
                 raise HTTPException(status_code=400, detail="Email already exists")
 
         # Update user with raw SQL
-        query = text("""
-            UPDATE users
-            SET username = :username, email = :email
-            WHERE id = :user_id
-        """)
+        query = text("UPDATE users SET username = :username, email = :email WHERE id = :user_id")
         db.execute(query, {
             "username": user_update.username,
             "email": user_update.email,
@@ -157,11 +149,7 @@ async def change_password(
         hashed_password = get_password_hash(password_change.new_password)
 
         # Update password using raw SQL
-        query = text("""
-            UPDATE users
-            SET hashed_password = :hashed_password
-            WHERE id = :user_id
-        """)
+        query = text("UPDATE users SET hashed_password = :hashed_password WHERE id = :user_id")
         db.execute(query, {
             "hashed_password": hashed_password,
             "user_id": current_user['id']
