@@ -34,7 +34,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     }
   }
 
-  void _showResetTokenDialog(BuildContext context) {
+  void _showResetTokenDialog() {
+    // Use the current context from the build method
+    final context = this.context;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -62,7 +65,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                Navigator.of(context).pop(); // Go back to login page
+                if (mounted) {
+                  Navigator.of(context).pop(); // Go back to login page
+                }
               },
               child: const Text('Cancel'),
             ),
@@ -70,16 +75,18 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
 
-                // Navigate to reset password page with the token and email
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder:
-                        (_) => ResetPasswordPage(
-                          token: _tokenController.text.trim(),
-                          email: _emailController.text.trim(),
-                        ),
-                  ),
-                );
+                if (mounted) {
+                  // Navigate to reset password page with the token and email
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => ResetPasswordPage(
+                            token: _tokenController.text.trim(),
+                            email: _emailController.text.trim(),
+                          ),
+                    ),
+                  );
+                }
               },
               child: const Text('Continue'),
             ),
@@ -103,10 +110,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               ),
             );
 
-            // Show a dialog to enter the reset token
+            // Show a dialog to enter the reset token after a delay
             Future.delayed(const Duration(seconds: 2), () {
               if (mounted) {
-                _showResetTokenDialog(context);
+                _showResetTokenDialog();
               }
             });
           } else if (state is AuthFailure) {

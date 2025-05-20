@@ -6,39 +6,50 @@ import '../../blocs/auth/auth_event.dart';
 import '../../blocs/auth/auth_state.dart';
 import '../../widgets/custom_text_field.dart';
 
-class ResetPasswordPage extends StatefulWidget {
-  final String token;
-  final String email;
-
-  const ResetPasswordPage({
-    super.key,
-    required this.token,
-    required this.email,
-  });
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<ResetPasswordPage> createState() => _ResetPasswordPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _ResetPasswordPageState extends State<ResetPasswordPage> {
+class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
+    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _resetPassword() {
+  void _togglePasswordVisibility() {
+    setState(() {
+      _obscurePassword = !_obscurePassword;
+    });
+  }
+
+  void _toggleConfirmPasswordVisibility() {
+    setState(() {
+      _obscureConfirmPassword = !_obscureConfirmPassword;
+    });
+  }
+
+  void _register() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthBloc>().add(
-        AuthResetPasswordRequested(
-          token: widget.token,
-          newPassword: _passwordController.text.trim(),
-          email: widget.email,
+        AuthRegisterRequested(
+          username: _usernameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
         ),
       );
     }
@@ -47,10 +58,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
+      appBar: AppBar(title: const Text('Register')),
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthResetPasswordSuccess) {
+          if (state is AuthRegistrationSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -63,7 +74,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             final navigator = Navigator.of(context);
             Future.delayed(const Duration(seconds: 2), () {
               if (mounted) {
-                navigator.popUntil((route) => route.isFirst);
+                navigator.pop();
               }
             });
           } else if (state is AuthFailure) {
@@ -85,17 +96,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Icon
-                    Icon(
-                      Icons.lock_reset,
-                      size: 80,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 24),
-
                     // Title
                     Text(
-                      'Reset Your Password',
+                      'Create Account',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.bold),
@@ -104,21 +107,63 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
                     // Subtitle
                     Text(
-                      'Enter your new password below',
+                      'Please fill in the form to create your account',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 32),
 
-                    // New Password Field
+                    // Username Field
                     CustomTextField(
-                      controller: _passwordController,
-                      labelText: 'New Password',
-                      prefixIcon: Icons.lock,
-                      obscureText: true,
+                      controller: _usernameController,
+                      labelText: 'Username',
+                      prefixIcon: Icons.person,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter a new password';
+                          return 'Please enter a username';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Email Field
+                    CustomTextField(
+                      controller: _emailController,
+                      labelText: 'Email',
+                      prefixIcon: Icons.email,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your email';
+                        }
+                        if (!RegExp(
+                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                        ).hasMatch(value)) {
+                          return 'Please enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Password Field
+                    CustomTextField(
+                      controller: _passwordController,
+                      labelText: 'Password',
+                      prefixIcon: Icons.lock,
+                      obscureText: _obscurePassword,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: _togglePasswordVisibility,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a password';
                         }
                         if (value.length < 6) {
                           return 'Password must be at least 6 characters';
@@ -132,8 +177,16 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     CustomTextField(
                       controller: _confirmPasswordController,
                       labelText: 'Confirm Password',
-                      prefixIcon: Icons.lock_outline,
-                      obscureText: true,
+                      prefixIcon: Icons.lock,
+                      obscureText: _obscureConfirmPassword,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirmPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: _toggleConfirmPasswordVisibility,
+                      ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please confirm your password';
@@ -146,32 +199,35 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Reset Password Button
+                    // Register Button
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         return ElevatedButton(
-                          onPressed:
-                              state is AuthLoading ? null : _resetPassword,
+                          onPressed: state is AuthLoading ? null : _register,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                           child:
                               state is AuthLoading
                                   ? const CircularProgressIndicator()
-                                  : const Text('Reset Password'),
+                                  : const Text('Register'),
                         );
                       },
                     ),
                     const SizedBox(height: 24),
 
-                    // Back to Login
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(
-                          context,
-                        ).popUntil((route) => route.isFirst);
-                      },
-                      child: const Text('Back to Login'),
+                    // Login Link
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Already have an account?'),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('Login'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
