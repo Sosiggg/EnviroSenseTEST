@@ -11,11 +11,21 @@ import '../constants/api_constants.dart';
 import '../errors/api_exceptions.dart';
 
 class ApiClient {
-  late final Dio _dio;
+  late Dio _dio; // Removed 'final' to allow resetting
   // Temporarily using SharedPreferences instead of FlutterSecureStorage
   // final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   ApiClient() {
+    _initDio();
+  }
+
+  // Static variables for token caching that persist across Dio resets
+  static String? _cachedToken;
+  static DateTime _lastTokenRefresh = DateTime.now();
+
+  // Initialize Dio with default settings
+  void _initDio() {
+    // Create a new Dio instance with default settings
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,
@@ -41,10 +51,6 @@ class ApiClient {
       );
     }
 
-    // Cache the token to avoid frequent SharedPreferences access
-    String? cachedToken;
-    DateTime lastTokenRefresh = DateTime.now();
-
     // Add interceptors
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -53,15 +59,15 @@ class ApiClient {
             // Check if we need to refresh the cached token (every 5 minutes)
             final now = DateTime.now();
             final shouldRefreshToken =
-                cachedToken == null ||
-                now.difference(lastTokenRefresh).inMinutes >= 5;
+                _cachedToken == null ||
+                now.difference(_lastTokenRefresh).inMinutes >= 5;
 
             if (shouldRefreshToken) {
               final prefs = await SharedPreferences.getInstance();
-              cachedToken = prefs.getString('token');
-              lastTokenRefresh = now;
+              _cachedToken = prefs.getString('token');
+              _lastTokenRefresh = now;
 
-              if (cachedToken != null) {
+              if (_cachedToken != null) {
                 if (kDebugMode) {
                   print('Token refreshed from SharedPreferences');
                 }
@@ -69,8 +75,8 @@ class ApiClient {
             }
 
             // Add token to request if available
-            if (cachedToken != null) {
-              options.headers['Authorization'] = 'Bearer $cachedToken';
+            if (_cachedToken != null) {
+              options.headers['Authorization'] = 'Bearer $_cachedToken';
             }
 
             return handler.next(options);
@@ -89,7 +95,7 @@ class ApiClient {
             try {
               final prefs = await SharedPreferences.getInstance();
               await prefs.remove('token');
-              cachedToken = null; // Clear the cached token too
+              _cachedToken = null; // Clear the cached token too
               if (kDebugMode) {
                 print('Token cleared due to 401 error');
               }
@@ -103,13 +109,6 @@ class ApiClient {
         },
       ),
     );
-
-    // Add logging interceptor in debug mode
-    if (kDebugMode) {
-      _dio.interceptors.add(
-        LogInterceptor(requestBody: true, responseBody: true),
-      );
-    }
   }
 
   // GET request
@@ -334,24 +333,21 @@ class ApiClient {
     }
 
     // Reset the Dio instance to clear any cached headers
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: ApiConstants.baseUrl,
-        connectTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 60),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        validateStatus: (status) => true,
-      ),
-    );
+    try {
+      // Clear all interceptors first
+      _dio.interceptors.clear();
 
-    // Re-add logging interceptor in debug mode
-    if (kDebugMode) {
-      _dio.interceptors.add(
-        LogInterceptor(requestBody: true, responseBody: true),
-      );
+      // Reinitialize Dio with default settings
+      _initDio();
+
+      if (kDebugMode) {
+        print('API Client: Dio instance reset successfully');
+      }
+    } catch (e) {
+      // If there's an error resetting Dio, log it but don't throw
+      if (kDebugMode) {
+        print('API Client: Error resetting Dio instance: $e');
+      }
     }
   }
 }
