@@ -90,8 +90,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // Check if there was an error in the response
       if (response.containsKey('error') && response['error'] == true) {
         final errorMessage = response['message'] ?? 'Login failed';
-        AppLogger.w('Login failed: $errorMessage');
-        emit(AuthFailure(errorMessage));
+        final errorCode = response['code'] as String?;
+
+        AppLogger.w('Login failed: $errorMessage (code: $errorCode)');
+
+        // Handle specific error codes
+        if (errorCode == 'INVALID_CREDENTIALS') {
+          // This is a wrong password/username scenario
+          emit(AuthFailure(errorMessage, code: errorCode));
+        } else if (errorCode == 'ACCOUNT_LOCKED') {
+          // This is for account lockout scenarios
+          emit(AuthFailure(errorMessage, code: errorCode));
+        } else {
+          // Generic error handling
+          emit(AuthFailure(errorMessage, code: errorCode));
+        }
         return;
       }
 

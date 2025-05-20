@@ -63,10 +63,38 @@ class _LoginPageState extends State<LoginPage> {
               MaterialPageRoute(builder: (_) => const HomePage()),
             );
           } else if (state is AuthFailure) {
+            // Customize error message based on error code
+            String errorMessage = state.message;
+            Color backgroundColor = Colors.red;
+
+            // Handle specific error codes
+            if (state.code == 'INVALID_CREDENTIALS') {
+              errorMessage =
+                  'Incorrect username or password. Please try again.';
+            } else if (state.code == 'ACCOUNT_LOCKED') {
+              errorMessage =
+                  'Your account has been locked due to too many failed attempts. Please try again later.';
+            }
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red,
+                content: Text(errorMessage),
+                backgroundColor: backgroundColor,
+                duration: const Duration(seconds: 4),
+                action:
+                    state.code == 'INVALID_CREDENTIALS'
+                        ? SnackBarAction(
+                          label: 'Forgot Password?',
+                          textColor: Colors.white,
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ForgotPasswordPage(),
+                              ),
+                            );
+                          },
+                        )
+                        : null,
               ),
             );
           }

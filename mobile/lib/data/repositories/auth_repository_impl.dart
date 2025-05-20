@@ -116,6 +116,41 @@ class AuthRepositoryImpl implements AuthRepository {
             };
           }
 
+          // Check for specific error status codes that indicate authentication issues
+          if (dioResponse.statusCode == 401) {
+            AppLogger.w('Authentication failed: Invalid credentials');
+            return {
+              'error': true,
+              'message': 'Incorrect username or password',
+              'code': 'INVALID_CREDENTIALS',
+            };
+          }
+
+          // Check for "detail" field which often contains error messages from FastAPI
+          if (responseMap.containsKey('detail')) {
+            final detail = responseMap['detail'];
+            if (detail is String) {
+              // Check for common authentication error messages
+              final lowerDetail = detail.toLowerCase();
+              if (lowerDetail.contains('incorrect') ||
+                  lowerDetail.contains('invalid') ||
+                  lowerDetail.contains('password') ||
+                  lowerDetail.contains('credentials')) {
+                AppLogger.w('Authentication failed: $detail');
+                return {
+                  'error': true,
+                  'message': 'Incorrect username or password',
+                  'detail': detail,
+                  'code': 'INVALID_CREDENTIALS',
+                };
+              }
+
+              // Return the error with the detail message
+              AppLogger.w('Login failed with detail: $detail');
+              return {'error': true, 'message': detail, 'code': 'API_ERROR'};
+            }
+          }
+
           // Check for access token in the processed response
           if (responseMap.containsKey('access_token') &&
               responseMap['access_token'] != null) {
@@ -129,6 +164,7 @@ class AuthRepositoryImpl implements AuthRepository {
               return {
                 'error': true,
                 'message': 'Error saving authentication token: ${e.toString()}',
+                'code': 'TOKEN_SAVE_ERROR',
               };
             }
           } else {
@@ -137,7 +173,9 @@ class AuthRepositoryImpl implements AuthRepository {
                 ? responseMap
                 : {
                   'error': true,
-                  'message': 'Login failed: ${dioResponse.statusMessage}',
+                  'message':
+                      'Login failed. Please check your credentials and try again.',
+                  'code': 'LOGIN_FAILED',
                 };
           }
         } on DioException catch (e) {
