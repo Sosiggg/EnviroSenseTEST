@@ -77,35 +77,51 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('Attempting login for user: ${event.username}');
+
       final response = await authRepository.login(
         username: event.username,
         password: event.password,
       );
 
+      // Log the response for debugging
+      AppLogger.d('Login response: $response');
+
       // Check if there was an error in the response
       if (response.containsKey('error') && response['error'] == true) {
-        emit(AuthFailure(response['message'] ?? 'Login failed'));
+        final errorMessage = response['message'] ?? 'Login failed';
+        AppLogger.w('Login failed: $errorMessage');
+        emit(AuthFailure(errorMessage));
         return;
       }
 
-      final token = response['access_token'];
-      if (token == null) {
-        emit(
-          const AuthFailure(
-            'Invalid response from server. No access token received.',
-          ),
-        );
+      // Safely extract the token
+      String? token;
+      if (response.containsKey('access_token')) {
+        token = response['access_token']?.toString();
+      }
+
+      if (token == null || token.isEmpty) {
+        const errorMessage =
+            'Invalid response from server. No access token received.';
+        AppLogger.w(errorMessage);
+        emit(const AuthFailure(errorMessage));
         return;
       }
+
+      AppLogger.i('Login successful, token received');
 
       try {
         // Get user profile
+        AppLogger.i('Fetching user profile');
         final userProfile = await authRepository.getUserProfile();
+        AppLogger.d('User profile response: $userProfile');
 
         // Check if there was an error in the user profile response
         if (userProfile.containsKey('error') && userProfile['error'] == true) {
           // If we can't get the profile but have a token, still consider it a success
-          AppLogger.w('Failed to get user profile: ${userProfile['message']}');
+          final errorMessage = userProfile['message'] ?? 'Unknown error';
+          AppLogger.w('Failed to get user profile: $errorMessage');
           emit(
             AuthLoginSuccess(
               token: token,
@@ -121,12 +137,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
 
         try {
-          final user = User.fromJson(userProfile);
+          // Create a fallback user in case parsing fails
+          final fallbackUser = User(
+            id: 0,
+            username: event.username,
+            email: userProfile['email'] ?? '',
+            isActive: true,
+          );
+
+          // Try to parse the user profile
+          User user;
+          try {
+            user = User.fromJson(userProfile);
+          } catch (parseError) {
+            AppLogger.e('Error parsing user profile: $parseError', parseError);
+            AppLogger.e('User profile data: $userProfile');
+            user = fallbackUser;
+          }
+
+          AppLogger.i('Login and profile fetch successful');
           emit(AuthLoginSuccess(token: token, user: user));
         } catch (parseError) {
           // If we can't parse the user profile but have a token, still consider it a success
-          AppLogger.e('Error parsing user profile: $parseError', parseError);
-          AppLogger.e('User profile data: $userProfile');
+          AppLogger.e('Error handling user profile: $parseError', parseError);
           emit(
             AuthLoginSuccess(
               token: token,
@@ -155,8 +188,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         );
       }
     } on ApiException catch (e) {
+      AppLogger.e('API exception during login: ${e.message}', e);
       emit(AuthFailure(e.message));
     } catch (e) {
+      AppLogger.e('Unexpected error during login: $e', e);
       emit(AuthFailure('Connection error: ${e.toString()}'));
     }
   }
@@ -230,29 +265,52 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('Fetching user profile');
       final userProfile = await authRepository.getUserProfile();
+      AppLogger.d('User profile response: $userProfile');
 
       // Check if there was an error in the response
       if (userProfile.containsKey('error') && userProfile['error'] == true) {
-        emit(
-          AuthFailure(userProfile['message'] ?? 'Failed to get user profile'),
-        );
+        final errorMessage =
+            userProfile['message'] ?? 'Failed to get user profile';
+        AppLogger.w('Failed to get user profile: $errorMessage');
+        emit(AuthFailure(errorMessage));
         return;
       }
 
       try {
-        final user = User.fromJson(userProfile);
+        // Create a fallback user in case parsing fails
+        final fallbackUser = User(
+          id: 0,
+          username: userProfile['username'] ?? 'User',
+          email: userProfile['email'] ?? '',
+          isActive: true,
+        );
+
+        // Try to parse the user profile
+        User user;
+        try {
+          user = User.fromJson(userProfile);
+        } catch (parseError) {
+          AppLogger.e('Error parsing user profile: $parseError', parseError);
+          AppLogger.e('User profile data: $userProfile');
+          user = fallbackUser;
+        }
+
+        AppLogger.i('User profile fetched successfully');
         emit(AuthAuthenticated(user));
       } catch (parseError) {
         // If we can't parse the user profile, log the error and emit a failure
-        AppLogger.e('Error parsing user profile: $parseError', parseError);
+        AppLogger.e('Error handling user profile: $parseError', parseError);
         AppLogger.e('User profile data: $userProfile');
-        emit(AuthFailure('Error parsing user profile: $parseError'));
+        emit(AuthFailure('Error processing user profile: $parseError'));
       }
     } on ApiException catch (e) {
+      AppLogger.e('API exception during profile fetch: ${e.message}', e);
       emit(AuthFailure(e.message));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      AppLogger.e('Unexpected error during profile fetch: $e', e);
+      emit(AuthFailure('Error fetching profile: ${e.toString()}'));
     }
   }
 
@@ -263,19 +321,48 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i(
+        'Updating user profile: username=${event.username}, email=${event.email}',
+      );
+
       final response = await authRepository.updateUserProfile(
         username: event.username,
         email: event.email,
       );
 
+      AppLogger.d('Profile update response: $response');
+
       // Check if there was an error in the response
       if (response.containsKey('error') && response['error'] == true) {
-        emit(AuthFailure(response['message'] ?? 'Failed to update profile'));
+        final errorMessage = response['message'] ?? 'Failed to update profile';
+        AppLogger.w('Failed to update profile: $errorMessage');
+        emit(AuthFailure(errorMessage));
         return;
       }
 
       try {
-        final user = User.fromJson(response);
+        // Create a fallback user in case parsing fails
+        final fallbackUser = User(
+          id: 0,
+          username: event.username ?? 'User',
+          email: event.email ?? '',
+          isActive: true,
+        );
+
+        // Try to parse the user profile
+        User user;
+        try {
+          user = User.fromJson(response);
+        } catch (parseError) {
+          AppLogger.e(
+            'Error parsing updated user profile: $parseError',
+            parseError,
+          );
+          AppLogger.e('User profile data: $response');
+          user = fallbackUser;
+        }
+
+        AppLogger.i('Profile updated successfully');
         emit(
           AuthProfileUpdateSuccess(
             user: user,
@@ -283,17 +370,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           ),
         );
       } catch (parseError) {
-        AppLogger.e(
-          'Error parsing updated user profile: $parseError',
-          parseError,
-        );
-        AppLogger.e('User profile data: $response');
-        emit(AuthFailure('Error updating profile: $parseError'));
+        AppLogger.e('Error handling profile update: $parseError', parseError);
+        AppLogger.e('Profile update data: $response');
+        emit(AuthFailure('Error processing profile update: $parseError'));
       }
     } on ApiException catch (e) {
+      AppLogger.e('API exception during profile update: ${e.message}', e);
       emit(AuthFailure(e.message));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      AppLogger.e('Unexpected error during profile update: $e', e);
+      emit(AuthFailure('Error updating profile: ${e.toString()}'));
     }
   }
 
