@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import json
 import logging
+from datetime import datetime
 
 from app.core.auth import get_current_active_user, verify_token
 from app.core.websocket import manager
@@ -25,7 +27,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
         return
 
     # Accept connection
-    await manager.connect(websocket, user.id)
+    await manager.connect(websocket, user['id'])
 
     try:
         while True:
@@ -38,7 +40,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
 
                 # Check if this is a ping message
                 if json_data.get("type") == "ping":
-                    logger.debug(f"Ping received from user {user.id}")
+                    logger.debug(f"Ping received from user {user['id']}")
                     await manager.handle_ping(websocket)
                     continue
 
@@ -51,18 +53,29 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
                         obstacle=json_data.get("obstacle")
                     )
 
-                    # Save sensor data to database
-                    db_sensor_data = SensorData(
-                        temperature=sensor_data.temperature,
-                        humidity=sensor_data.humidity,
-                        obstacle=sensor_data.obstacle,
-                        user_id=user.id
-                    )
-                    db.add(db_sensor_data)
+                    # Save sensor data to database using raw SQL
+                    query = text("""
+                        INSERT INTO sensor_data (temperature, humidity, obstacle, user_id, timestamp)
+                        VALUES (:temperature, :humidity, :obstacle, :user_id, NOW())
+                        RETURNING id, timestamp
+                    """)
+
+                    result = db.execute(query, {
+                        "temperature": sensor_data.temperature,
+                        "humidity": sensor_data.humidity,
+                        "obstacle": sensor_data.obstacle,
+                        "user_id": user['id']
+                    })
+
+                    # Get the inserted row's id and timestamp
+                    row = result.fetchone()
                     db.commit()
 
+                    sensor_id = row[0]
+                    timestamp = row[1]
+
                     # Log sensor data
-                    logger.info(f"Received sensor data from user {user.id}: Temperature={sensor_data.temperature}°C, Humidity={sensor_data.humidity}%, Obstacle={sensor_data.obstacle}")
+                    logger.info(f"Received sensor data from user {user['id']}: Temperature={sensor_data.temperature}°C, Humidity={sensor_data.humidity}%, Obstacle={sensor_data.obstacle}")
 
                     # Send acknowledgment
                     await manager.send_personal_message(
@@ -76,15 +89,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
                             "temperature": sensor_data.temperature,
                             "humidity": sensor_data.humidity,
                             "obstacle": sensor_data.obstacle,
-                            "timestamp": db_sensor_data.timestamp.isoformat(),
-                            "id": db_sensor_data.id,
-                            "user_id": user.id
+                            "timestamp": timestamp.isoformat(),
+                            "id": sensor_id,
+                            "user_id": user['id']
                         }),
-                        user.id
+                        user['id']
                     )
                 else:
                     # Unknown message type
-                    logger.warning(f"Unknown message type received from user {user.id}: {json_data}")
+                    logger.warning(f"Unknown message type received from user {user['id']}: {json_data}")
                     await manager.send_personal_message(
                         json.dumps({"status": "error", "message": "Unknown message type"}),
                         websocket
@@ -92,14 +105,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
 
             except json.JSONDecodeError:
                 # Handle invalid JSON
-                logger.warning(f"Invalid JSON received from user {user.id}")
+                logger.warning(f"Invalid JSON received from user {user['id']}")
                 await manager.send_personal_message(
                     json.dumps({"status": "error", "message": "Invalid JSON data"}),
                     websocket
                 )
             except Exception as e:
                 # Handle other errors
-                logger.error(f"Error processing message from user {user.id}: {str(e)}")
+                logger.error(f"Error processing message from user {user['id']}: {str(e)}")
                 await manager.send_personal_message(
                     json.dumps({"status": "error", "message": f"Server error: {str(e)}"}),
                     websocket
@@ -107,29 +120,84 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
 
     except WebSocketDisconnect:
         # Handle disconnection
-        logger.info(f"WebSocket disconnected for user {user.id}")
-        manager.disconnect(websocket, user.id)
+        logger.info(f"WebSocket disconnected for user {user['id']}")
+        manager.disconnect(websocket, user['id'])
     except Exception as e:
         # Handle unexpected errors
-        logger.error(f"Unexpected error in WebSocket connection for user {user.id}: {str(e)}")
-        manager.disconnect(websocket, user.id)
+        logger.error(f"Unexpected error in WebSocket connection for user {user['id']}: {str(e)}")
+        manager.disconnect(websocket, user['id'])
 
-@router.get("/data", response_model=list[SensorDataSchema])
-async def get_sensor_data(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    sensor_data = db.query(SensorData).filter(SensorData.user_id == current_user.id).all()
-    return sensor_data
+@router.get("/data")
+async def get_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    try:
+        # Use raw SQL to get sensor data
+        query = text("""
+            SELECT id, temperature, humidity, obstacle, user_id, timestamp
+            FROM sensor_data
+            WHERE user_id = :user_id
+            ORDER BY timestamp DESC
+        """)
 
-@router.get("/data/latest", response_model=SensorDataSchema)
-async def get_latest_sensor_data(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    """Get the latest sensor data for the current user"""
-    latest_data = db.query(SensorData).filter(
-        SensorData.user_id == current_user.id
-    ).order_by(SensorData.timestamp.desc()).first()
+        result = db.execute(query, {"user_id": current_user['id']})
 
-    if not latest_data:
+        # Convert to list of dictionaries
+        sensor_data = []
+        for row in result:
+            sensor_data.append({
+                "id": row[0],
+                "temperature": row[1],
+                "humidity": row[2],
+                "obstacle": row[3],
+                "user_id": row[4],
+                "timestamp": row[5].isoformat()
+            })
+
+        return sensor_data
+    except Exception as e:
+        logger.error(f"Error getting sensor data: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No sensor data found for this user"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while getting sensor data: {str(e)}"
         )
 
-    return latest_data
+@router.get("/data/latest")
+async def get_latest_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Get the latest sensor data for the current user"""
+    try:
+        # Use raw SQL to get latest sensor data
+        query = text("""
+            SELECT id, temperature, humidity, obstacle, user_id, timestamp
+            FROM sensor_data
+            WHERE user_id = :user_id
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """)
+
+        result = db.execute(query, {"user_id": current_user['id']})
+        row = result.fetchone()
+
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No sensor data found for this user"
+            )
+
+        # Convert to dictionary
+        latest_data = {
+            "id": row[0],
+            "temperature": row[1],
+            "humidity": row[2],
+            "obstacle": row[3],
+            "user_id": row[4],
+            "timestamp": row[5].isoformat()
+        }
+
+        return latest_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting latest sensor data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while getting latest sensor data: {str(e)}"
+        )
