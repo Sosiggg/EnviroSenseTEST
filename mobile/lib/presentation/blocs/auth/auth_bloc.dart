@@ -498,20 +498,56 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('Changing password');
+
       final response = await authRepository.changePassword(
         currentPassword: event.currentPassword,
         newPassword: event.newPassword,
       );
 
-      emit(
-        AuthChangePasswordSuccess(
-          response['message'] ?? 'Password changed successfully',
-        ),
-      );
+      AppLogger.d('Password change response: $response');
+
+      // Check if there was an error in the response
+      if (response.containsKey('error') && response['error'] == true) {
+        final errorMessage = response['message'] ?? 'Failed to change password';
+
+        // Check for specific error messages and provide more user-friendly versions
+        String userFriendlyMessage = errorMessage;
+        if (errorMessage.toLowerCase().contains('incorrect current password') ||
+            errorMessage.toLowerCase().contains('invalid password')) {
+          userFriendlyMessage = 'The current password you entered is incorrect';
+        } else if (errorMessage.contains('Internal Server Error') ||
+            errorMessage.contains('Unexpected error')) {
+          userFriendlyMessage =
+              'Unable to change password. Please try again later.';
+        }
+
+        AppLogger.w('Failed to change password: $errorMessage');
+        emit(AuthFailure(userFriendlyMessage));
+        return;
+      }
+
+      // Success case
+      final successMessage =
+          response['message'] ?? 'Password changed successfully';
+      AppLogger.i('Password changed successfully: $successMessage');
+
+      emit(AuthChangePasswordSuccess(successMessage));
     } on ApiException catch (e) {
-      emit(AuthFailure(e.message));
+      AppLogger.e('API exception during password change: ${e.message}', e);
+
+      // Provide a user-friendly error message
+      String userFriendlyMessage = e.message;
+      if (e.message.contains('Internal Server Error') ||
+          e.message.contains('Unexpected error')) {
+        userFriendlyMessage =
+            'Unable to change password. Please try again later.';
+      }
+
+      emit(AuthFailure(userFriendlyMessage));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      AppLogger.e('Unexpected error during password change: $e', e);
+      emit(AuthFailure('Unable to change password. Please try again later.'));
     }
   }
 }
