@@ -72,6 +72,21 @@ class EnviroSenseApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
+      // Wrap the app in a FocusScope to ensure keyboard events are properly handled
+      builder: (context, child) {
+        return GestureDetector(
+          // Add this to ensure tapping outside of text fields dismisses the keyboard
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+          },
+          // Wrap in a FocusScope to ensure keyboard events are properly handled
+          child: Focus(
+            // This ensures the app can receive keyboard events properly
+            autofocus: true,
+            child: child!,
+          ),
+        );
+      },
       home: const SplashScreen(),
     );
   }
