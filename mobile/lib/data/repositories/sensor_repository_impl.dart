@@ -34,8 +34,32 @@ class SensorRepositoryImpl implements SensorRepository {
         return [];
       }
 
+      // If we get here, check if the response itself is a list
+      if (response is List<dynamic>) {
+        AppLogger.i('Found direct list format, using it directly');
+        final result = <Map<String, dynamic>>[];
+        for (final dynamic item in response) {
+          if (item is Map<String, dynamic>) {
+            result.add(item);
+          } else if (item is Map) {
+            // Convert to the right type
+            result.add(Map<String, dynamic>.from(item));
+          }
+        }
+        return result;
+      }
+
       // If we get here, the response is not in the expected format
       AppLogger.w('Unexpected response format: $response');
+
+      // As a last resort, try to wrap the response in a list if it looks like sensor data
+      if (response.containsKey('temperature') &&
+          response.containsKey('humidity') &&
+          response.containsKey('id')) {
+        AppLogger.i('Found single sensor data item, wrapping in list');
+        return [Map<String, dynamic>.from(response)];
+      }
+
       return [];
     } catch (e) {
       AppLogger.e('Error getting sensor data: $e', e);
@@ -56,6 +80,15 @@ class SensorRepositoryImpl implements SensorRepository {
         // Log the message but return empty map
         AppLogger.w('API message: ${response['message']}');
         return {};
+      }
+
+      // If we get here, the response might be the direct sensor data (not wrapped in 'data')
+      // Check if it has the expected sensor data fields
+      if (response.containsKey('temperature') &&
+          response.containsKey('humidity') &&
+          response.containsKey('id')) {
+        AppLogger.i('Found direct sensor data format, using it directly');
+        return response;
       }
 
       // If we get here, the response is not in the expected format
@@ -93,8 +126,32 @@ class SensorRepositoryImpl implements SensorRepository {
         return [];
       }
 
+      // If we get here, check if the response itself is a list
+      if (response is List<dynamic>) {
+        AppLogger.i('Found direct list format, using it directly');
+        final result = <Map<String, dynamic>>[];
+        for (final dynamic item in response) {
+          if (item is Map<String, dynamic>) {
+            result.add(item);
+          } else if (item is Map) {
+            // Convert to the right type
+            result.add(Map<String, dynamic>.from(item));
+          }
+        }
+        return result;
+      }
+
       // If we get here, the response is not in the expected format
       AppLogger.w('Unexpected response format: $response');
+
+      // As a last resort, try to wrap the response in a list if it looks like sensor data
+      if (response.containsKey('temperature') &&
+          response.containsKey('humidity') &&
+          response.containsKey('id')) {
+        AppLogger.i('Found single sensor data item, wrapping in list');
+        return [Map<String, dynamic>.from(response)];
+      }
+
       return [];
     } catch (e) {
       AppLogger.e('Error getting sensor data by date range: $e', e);
