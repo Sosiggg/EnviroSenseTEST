@@ -281,8 +281,137 @@ class AuthRepositoryImpl implements AuthRepository {
         return {'error': true, 'message': 'Not authenticated'};
       }
 
-      // Make the API request to get the latest profile data
-      final response = await _apiClient.get(ApiConstants.userProfile);
+      // Add retry logic for transient errors
+      int retryCount = 0;
+      const maxRetries = 2;
+      Exception? lastException;
+
+      while (retryCount <= maxRetries) {
+        try {
+          // Make the API request to get the latest profile data
+          final response = await _apiClient.get(ApiConstants.userProfile);
+
+          // If we get here, the request succeeded
+          if (retryCount > 0) {
+            AppLogger.i('Profile fetch succeeded after $retryCount retries');
+          }
+
+          // Log the response for debugging
+          AppLogger.d('User profile response: $response');
+
+          // Check if the response indicates an error
+          if (response.containsKey('error') && response['error'] == true) {
+            AppLogger.w('Error in user profile response: ${response['message']}');
+            return response;
+          }
+
+          // Validate that the response contains expected user data
+          if (!response.containsKey('id') && !response.containsKey('username')) {
+            AppLogger.w('Response missing required user data fields: $response');
+
+            // Check if the response contains a detail field (common in FastAPI errors)
+            if (response.containsKey('detail')) {
+              return {
+                'error': true,
+                'message': 'Authentication error: ${response['detail']}. Please log out and log in again.'
+              };
+            }
+
+            // Check if the response contains a message field
+            if (response.containsKey('message')) {
+              return {
+                'error': true,
+                'message': 'Authentication error: ${response['message']}. Please log out and log in again.'
+              };
+            }
+
+            // If we have a status code, include it in the error message
+            if (response.containsKey('statusCode')) {
+              return {
+                'error': true,
+                'message': 'Server returned status ${response['statusCode']}. Please log out and log in again.'
+              };
+            }
+
+            // Default error message with more helpful instructions
+            return {
+              'error': true,
+              'message': 'Unable to load your profile. Please log out and log in again to refresh your session.'
+            };
+          }
+
+          // Ensure ID is properly handled
+          if (response.containsKey('id') && response['id'] is String) {
+            // Convert string ID to int if possible
+            try {
+              final idInt = int.parse(response['id']);
+              response['id'] = idInt;
+            } catch (e) {
+              AppLogger.w('Could not parse user ID as integer: ${response['id']}');
+              // Keep the string ID, the User.fromJson will handle it
+            }
+          }
+
+          // Cache the profile data with the token as part of the key
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final tokenFirstPart = token.split('.').first; // Use part of the token as an identifier
+            await prefs.setString(
+              'user_profile_$tokenFirstPart',
+              jsonEncode(response),
+            );
+            AppLogger.d('User profile cached successfully');
+          } catch (cacheError) {
+            AppLogger.w('Error caching user profile: $cacheError');
+            // Continue even if caching fails
+          }
+
+          return response;
+
+        } on ApiException catch (e) {
+          lastException = e;
+
+          // Only retry on server errors or timeouts, not on auth errors
+          if (e is ServerException || e is TimeoutException) {
+            retryCount++;
+            if (retryCount <= maxRetries) {
+              AppLogger.w('Retrying profile fetch (attempt $retryCount) after error: ${e.message}');
+              await Future.delayed(Duration(milliseconds: 500 * retryCount));
+              continue;
+            }
+          } else {
+            // Don't retry for auth errors or other client errors
+            AppLogger.e('Non-retryable API error during profile fetch: ${e.message}', e);
+            rethrow;
+          }
+        } catch (e) {
+          lastException = e is Exception ? e : Exception(e.toString());
+
+          // Retry for other errors too
+          retryCount++;
+          if (retryCount <= maxRetries) {
+            AppLogger.w('Retrying profile fetch (attempt $retryCount) after error: $e');
+            await Future.delayed(Duration(milliseconds: 500 * retryCount));
+            continue;
+          }
+        }
+      }
+
+      // If we get here, all retries failed
+      if (lastException != null) {
+        throw lastException;
+      }
+
+      // Fallback response if all retries failed but no exception was thrown
+      return {
+        'error': true,
+        'message': 'Failed to fetch profile after $maxRetries retries'
+      };
+    } catch (e) {
+      AppLogger.e('Error getting user profile: $e', e);
+      return {'error': true, 'message': 'Failed to get user profile: $e'};
+    }
+  }
 
       // Log the response for debugging
       AppLogger.d('User profile response: $response');
@@ -295,8 +424,41 @@ class AuthRepositoryImpl implements AuthRepository {
 
       // Validate that the response contains expected user data
       if (!response.containsKey('id') && !response.containsKey('username')) {
-        AppLogger.w('Response missing required user data fields');
-        return {'error': true, 'message': 'Invalid user profile data'};
+        AppLogger.w('Response missing required user data fields: $response');
+
+        // Check if the response contains a detail field (common in FastAPI errors)
+        if (response.containsKey('detail')) {
+          return {
+            'error': true,
+            'message':
+                'Authentication error: ${response['detail']}. Please log out and log in again.',
+          };
+        }
+
+        // Check if the response contains a message field
+        if (response.containsKey('message')) {
+          return {
+            'error': true,
+            'message':
+                'Authentication error: ${response['message']}. Please log out and log in again.',
+          };
+        }
+
+        // If we have a status code, include it in the error message
+        if (response.containsKey('statusCode')) {
+          return {
+            'error': true,
+            'message':
+                'Server returned status ${response['statusCode']}. Please log out and log in again.',
+          };
+        }
+
+        // Default error message with more helpful instructions
+        return {
+          'error': true,
+          'message':
+              'Unable to load your profile. Please log out and log in again to refresh your session.',
+        };
       }
 
       // Ensure ID is properly handled
@@ -393,13 +555,66 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       AppLogger.i('Password change response: $response');
+
+      // Check for specific error patterns in the response
+      if (response.containsKey('message') && response['message'] is String) {
+        final message = response['message'] as String;
+
+        // Check for "Internal Server Error"
+        if (message.contains('Internal Server Error')) {
+          AppLogger.w('Server error during password change: $message');
+          return {
+            'error': true,
+            'message': 'The current password you entered is incorrect',
+            'code': 'INVALID_CREDENTIALS',
+            'original_error': message,
+          };
+        }
+
+        // Check for other error messages that might indicate incorrect password
+        if (message.toLowerCase().contains('incorrect') ||
+            message.toLowerCase().contains('invalid') ||
+            message.toLowerCase().contains('wrong') ||
+            message.toLowerCase().contains('password')) {
+          AppLogger.w('Password validation error: $message');
+          return {
+            'error': true,
+            'message': 'The current password you entered is incorrect',
+            'code': 'INVALID_CREDENTIALS',
+            'original_error': message,
+          };
+        }
+      }
+
+      // Check for status code in the response
+      if (response.containsKey('statusCode') && response['statusCode'] == 500) {
+        AppLogger.w('Server error (500) during password change');
+        return {
+          'error': true,
+          'message': 'The current password you entered is incorrect',
+          'code': 'INVALID_CREDENTIALS',
+          'original_status': response['statusCode'],
+        };
+      }
+
       return response;
     } on ApiException catch (e) {
       AppLogger.e('API error during password change: ${e.message}', e);
-      return {'error': true, 'message': e.message};
+
+      // Provide a user-friendly message for common errors
+      if (e is ServerException || e.message.contains('500')) {
+        return {
+          'error': true,
+          'message': 'The current password you entered is incorrect',
+          'code': 'INVALID_CREDENTIALS',
+          'original_error': e.message,
+        };
+      }
+
+      return {'error': true, 'message': 'The current password you entered is incorrect'};
     } catch (e) {
       AppLogger.e('Unexpected error during password change: $e', e);
-      return {'error': true, 'message': 'Unexpected error: ${e.toString()}'};
+      return {'error': true, 'message': 'The current password you entered is incorrect'};
     }
   }
 
