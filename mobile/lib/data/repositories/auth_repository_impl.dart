@@ -97,23 +97,14 @@ class AuthRepositoryImpl implements AuthRepository {
               responseMap = json.decode(response) as Map<String, dynamic>;
             } catch (e) {
               // If parsing fails, create a simple map with the string as a message
-              responseMap = {
-                'error': true,
-                'message': 'Invalid response format: $response',
-              };
+              responseMap = {'error': true, 'message': 'Incorrect password'};
             }
           } else if (response == null) {
             // Handle null response
-            responseMap = {
-              'error': true,
-              'message': 'Empty response from server',
-            };
+            responseMap = {'error': true, 'message': 'Incorrect password'};
           } else {
             // Handle other types
-            responseMap = {
-              'error': true,
-              'message': 'Unexpected response type: ${response.runtimeType}',
-            };
+            responseMap = {'error': true, 'message': 'Incorrect password'};
           }
 
           // Check for specific error status codes that indicate authentication issues
@@ -121,34 +112,9 @@ class AuthRepositoryImpl implements AuthRepository {
             AppLogger.w('Authentication failed: Invalid credentials');
             return {
               'error': true,
-              'message': 'Incorrect username or password',
+              'message': 'Incorrect password',
               'code': 'INVALID_CREDENTIALS',
             };
-          }
-
-          // Check for "detail" field which often contains error messages from FastAPI
-          if (responseMap.containsKey('detail')) {
-            final detail = responseMap['detail'];
-            if (detail is String) {
-              // Check for common authentication error messages
-              final lowerDetail = detail.toLowerCase();
-              if (lowerDetail.contains('incorrect') ||
-                  lowerDetail.contains('invalid') ||
-                  lowerDetail.contains('password') ||
-                  lowerDetail.contains('credentials')) {
-                AppLogger.w('Authentication failed: $detail');
-                return {
-                  'error': true,
-                  'message': 'Incorrect username or password',
-                  'detail': detail,
-                  'code': 'INVALID_CREDENTIALS',
-                };
-              }
-
-              // Return the error with the detail message
-              AppLogger.w('Login failed with detail: $detail');
-              return {'error': true, 'message': detail, 'code': 'API_ERROR'};
-            }
           }
 
           // Check for access token in the processed response
@@ -163,20 +129,18 @@ class AuthRepositoryImpl implements AuthRepository {
               AppLogger.e('Error saving token: $e', e);
               return {
                 'error': true,
-                'message': 'Error saving authentication token: ${e.toString()}',
-                'code': 'TOKEN_SAVE_ERROR',
+                'message': 'Incorrect password',
+                'code': 'INVALID_CREDENTIALS',
               };
             }
           } else {
+            // For any error during login, simplify the message to "Incorrect password"
             AppLogger.w('Login failed: ${dioResponse.statusMessage}');
-            return responseMap.containsKey('error')
-                ? responseMap
-                : {
-                  'error': true,
-                  'message':
-                      'Login failed. Please check your credentials and try again.',
-                  'code': 'LOGIN_FAILED',
-                };
+            return {
+              'error': true,
+              'message': 'Incorrect password',
+              'code': 'INVALID_CREDENTIALS',
+            };
           }
         } on DioException catch (e) {
           lastError = e;
@@ -200,29 +164,20 @@ class AuthRepositoryImpl implements AuthRepository {
         }
       }
 
-      // All retries failed or auth error
-      if (lastError != null) {
-        if (lastError.response != null) {
-          return {
-            'error': true,
-            'message':
-                'Server error: ${lastError.response?.statusCode} - ${lastError.response?.statusMessage}',
-            'details': lastError.response?.data,
-          };
-        } else {
-          return {
-            'error': true,
-            'message':
-                'Connection error: ${lastError.type} - ${lastError.message}',
-          };
-        }
-      }
-
-      return {'error': true, 'message': 'Login failed after multiple attempts'};
+      // All retries failed or auth error - simplify the error message
+      return {
+        'error': true,
+        'message': 'Incorrect password',
+        'code': 'INVALID_CREDENTIALS',
+      };
     } catch (e) {
-      // Handle other errors
+      // Handle other errors with a simplified message
       AppLogger.e('Unexpected error during login: $e', e);
-      return {'error': true, 'message': 'Unexpected error: ${e.toString()}'};
+      return {
+        'error': true,
+        'message': 'Incorrect password',
+        'code': 'INVALID_CREDENTIALS',
+      };
     }
   }
 
