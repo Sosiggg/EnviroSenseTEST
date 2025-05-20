@@ -70,36 +70,62 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me", response_model=UserSchema)
+@router.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
+    try:
+        # Return a dictionary instead of the User object
+        return {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "is_active": current_user.is_active
+        }
+    except Exception as e:
+        logger.error(f"Error getting user profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while getting the profile: {str(e)}"
+        )
 
-@router.put("/me", response_model=UserSchema)
+@router.put("/me")
 async def update_user_profile(
     user_update: UserUpdate,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Check if username is being changed and if it already exists
-    if user_update.username != current_user.username:
-        db_user = db.query(User).filter(User.username == user_update.username).first()
-        if db_user:
-            raise HTTPException(status_code=400, detail="Username already exists")
+    try:
+        # Check if username is being changed and if it already exists
+        if user_update.username != current_user.username:
+            db_user = db.query(User).filter(User.username == user_update.username).first()
+            if db_user:
+                raise HTTPException(status_code=400, detail="Username already exists")
 
-    # Check if email is being changed and if it already exists
-    if user_update.email != current_user.email:
-        db_email = db.query(User).filter(User.email == user_update.email).first()
-        if db_email:
-            raise HTTPException(status_code=400, detail="Email already exists")
+        # Check if email is being changed and if it already exists
+        if user_update.email != current_user.email:
+            db_email = db.query(User).filter(User.email == user_update.email).first()
+            if db_email:
+                raise HTTPException(status_code=400, detail="Email already exists")
 
-    # Update user
-    current_user.username = user_update.username
-    current_user.email = user_update.email
+        # Update user
+        current_user.username = user_update.username
+        current_user.email = user_update.email
 
-    db.commit()
-    db.refresh(current_user)
+        db.commit()
+        db.refresh(current_user)
 
-    return current_user
+        # Return a dictionary instead of the User object
+        return {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "is_active": current_user.is_active
+        }
+    except Exception as e:
+        logger.error(f"Error updating user profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while updating the profile: {str(e)}"
+        )
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
