@@ -31,8 +31,7 @@ import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const { login, error, loading } = useAuth();
-  const navigate = useNavigate();
-  const theme = useTheme();
+  const navigate = useNavigate(); const theme = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
@@ -53,8 +52,10 @@ const Login = () => {
       await login(username, password);
       navigate('/');
     } catch (error) {
-      // Error is handled by the auth context
       console.error('Login error:', error);
+
+      // Display the user-friendly error message
+      setFormError(error.message || 'An error occurred during login. Please try again later.');
     }
   };
 
@@ -118,20 +119,6 @@ const Login = () => {
                 mb: 4
               }}
             >
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 60,
-                  height: 60,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255, 255, 255, 0.2)',
-                  mr: 2
-                }}
-              >
-                <ThermostatIcon sx={{ fontSize: 32 }} />
-              </Box>
               <Typography
                 variant="h3"
                 component="h1"

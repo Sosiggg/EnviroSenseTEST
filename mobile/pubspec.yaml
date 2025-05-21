@@ -47,6 +47,8 @@ dependencies:
   # Network
   http: ^1.2.1
   dio: ^5.8.0+1
+  dio_cache_interceptor: ^3.5.0
+  dio_smart_retry: ^6.0.0
   web_socket_channel: ^2.4.4
 
   # Storage

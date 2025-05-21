@@ -46,8 +46,18 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Get screen width for responsive design
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360; // Extra small screen detection
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
+      appBar: AppBar(
+        title: const Text('Reset Password'),
+        elevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        foregroundColor: theme.colorScheme.primary,
+      ),
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthResetPasswordSuccess) {
@@ -55,6 +65,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               SnackBar(
                 content: Text(state.message),
                 backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                margin: EdgeInsets.all(10),
               ),
             );
 
@@ -70,7 +85,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
-                backgroundColor: Colors.red,
+                backgroundColor: theme.colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                margin: EdgeInsets.all(10),
               ),
             );
           }
@@ -78,44 +98,58 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Icon
-                    Icon(
-                      Icons.lock_reset,
-                      size: 80,
-                      color: Theme.of(context).colorScheme.primary,
+                    // Icon with container
+                    Container(
+                      width: isSmallScreen ? 70 : 80,
+                      height: isSmallScreen ? 70 : 80,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.lock_reset,
+                        size: isSmallScreen ? 40 : 45,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: isSmallScreen ? 20 : 24),
 
                     // Title
                     Text(
                       'Reset Your Password',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 8),
 
                     // Subtitle
                     Text(
-                      'Enter your new password below',
+                      'Create a new secure password for your account',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade600,
+                      ),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isSmallScreen ? 24 : 32),
 
                     // New Password Field
                     CustomTextField(
                       controller: _passwordController,
                       labelText: 'New Password',
+                      hintText: 'Enter a secure password',
                       prefixIcon: Icons.lock,
                       obscureText: true,
+                      textInputAction: TextInputAction.next,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a new password';
@@ -126,14 +160,17 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: isSmallScreen ? 12 : 16),
 
                     // Confirm Password Field
                     CustomTextField(
                       controller: _confirmPasswordController,
                       labelText: 'Confirm Password',
+                      hintText: 'Re-enter your password',
                       prefixIcon: Icons.lock_outline,
                       obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _resetPassword(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please confirm your password';
@@ -144,7 +181,46 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: isSmallScreen ? 20 : 24),
+
+                    // Password requirements info
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Password requirements:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '• At least 6 characters long',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          Text(
+                            '• Include a mix of letters, numbers, and symbols for better security',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: isSmallScreen ? 20 : 24),
 
                     // Reset Password Button
                     BlocBuilder<AuthBloc, AuthState>(
@@ -153,25 +229,50 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           onPressed:
                               state is AuthLoading ? null : _resetPassword,
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: EdgeInsets.symmetric(
+                              vertical: isSmallScreen ? 12 : 16,
+                            ),
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: theme.colorScheme.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 2,
                           ),
                           child:
                               state is AuthLoading
-                                  ? const CircularProgressIndicator()
-                                  : const Text('Reset Password'),
+                                  ? SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: theme.colorScheme.onPrimary,
+                                    ),
+                                  )
+                                  : Text(
+                                    'Reset Password',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: isSmallScreen ? 14 : 16,
+                                    ),
+                                  ),
                         );
                       },
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: isSmallScreen ? 16 : 20),
 
                     // Back to Login
-                    TextButton(
+                    TextButton.icon(
                       onPressed: () {
                         Navigator.of(
                           context,
                         ).popUntil((route) => route.isFirst);
                       },
-                      child: const Text('Back to Login'),
+                      icon: Icon(Icons.arrow_back, size: 16),
+                      label: Text('Back to Login'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),

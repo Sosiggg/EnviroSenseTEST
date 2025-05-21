@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Grid,
   Typography,
@@ -6,34 +6,69 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Divider,
   Card,
-  CardContent,
   Chip,
   useTheme,
   alpha,
   Stack,
   IconButton,
-  Tooltip
+  Tooltip,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import {
   Thermostat as ThermostatIcon,
-  Opacity as OpacityIcon,
-  Warning as WarningIcon,
   Refresh as RefreshIcon,
-  History as HistoryIcon,
-  MoreVert as MoreVertIcon,
   WifiTethering as WifiTetheringIcon,
   WifiOff as WifiOffIcon
 } from '@mui/icons-material';
 import { useSensor } from '../context/SensorContext';
 import SensorCard from '../components/SensorCard';
 import SensorChart from '../components/SensorChart';
-import { formatDateTime, getTemperatureColor, getHumidityColor, getObstacleColor } from '../utils/formatters';
+import { formatDateTime, getTemperatureColor, getHumidityColor } from '../utils/formatters';
 
 const Dashboard = () => {
-  const { sensorData, latestData, loading, error, isConnected } = useSensor();
+  const { sensorData, latestData, loading, error, isConnected, refreshData } = useSensor();
   const theme = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Function to refresh sensor data
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+
+    setRefreshing(true);
+    try {
+      console.log('Manually refreshing sensor data...');
+      const data = await refreshData();
+      console.log('Refreshed sensor data:', data);
+
+      // Force a re-render by setting state
+      if (data && data.length > 0) {
+        const latest = data[data.length - 1];
+        console.log('Setting latest data manually:', latest);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setTimeout(() => setRefreshing(false), 1000); // Show refresh animation for at least 1 second
+    }
+  }, [refreshData, refreshing]);
+
+  // Auto-refresh data every 30 seconds if connected but no data is showing
+  useEffect(() => {
+    if (isConnected && (!latestData || latestData.temperature === undefined)) {
+      const intervalId = setInterval(() => {
+        console.log('Auto-refreshing data...');
+        handleRefresh();
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(intervalId);
+    }
+  }, [isConnected, latestData, handleRefresh]);
 
   // Show loading state
   if (loading) {
@@ -58,100 +93,138 @@ const Dashboard = () => {
   // Show error state
   if (error) {
     return (
-      <Alert
-        severity="error"
-        sx={{
-          mt: 2,
-          p: 3,
-          borderRadius: 2,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)'
-        }}
-      >
-        <Typography variant="h6" gutterBottom>
-          Error Loading Data
+      <Box>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Dashboard
         </Typography>
-        <Typography variant="body1">
-          {error}
-        </Typography>
-      </Alert>
+
+        <Alert
+          severity="error"
+          sx={{
+            mt: 2,
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)'
+          }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? 'Retrying...' : 'Retry'}
+            </Button>
+          }
+        >
+          <Typography variant="h6" gutterBottom>
+            Error Loading Data
+          </Typography>
+          <Typography variant="body1">
+            {error}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+            This could be due to a network issue or the server might be unavailable.
+          </Typography>
+        </Alert>
+
+        <Box sx={{ mt: 3 }}>
+          <Paper sx={{ p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Troubleshooting Steps
+            </Typography>
+            <Typography variant="body1" paragraph>
+              Please try the following steps to resolve the connection issue:
+            </Typography>
+            <Typography variant="body2" component="ol" sx={{ pl: 2 }}>
+              <li>Check your internet connection</li>
+              <li>Verify that the backend server is running</li>
+              <li>Ensure your authentication credentials are correct</li>
+              <li>Try refreshing the page or logging out and back in</li>
+            </Typography>
+          </Paper>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
+      {/* CSS for animations */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+
       {/* Dashboard Header */}
       <Box
         sx={{
-          mb: 4,
+          mb: 3,
           display: 'flex',
           flexDirection: { xs: 'column', sm: 'row' },
           justifyContent: 'space-between',
           alignItems: { xs: 'flex-start', sm: 'center' },
-          gap: 2
+          gap: 1
         }}
       >
         <Box>
           <Typography
-            variant="h4"
+            variant="h5"
             component="h1"
-            gutterBottom
             sx={{
               fontWeight: 'bold',
-              background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              letterSpacing: '0.5px'
+              color: theme.palette.primary.main,
+              mb: 0.5
             }}
           >
             EnviroSense Dashboard
           </Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="body2" color="text.secondary">
             Real-time environmental monitoring data
           </Typography>
         </Box>
 
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
-            icon={isConnected ? <WifiTetheringIcon /> : <WifiOffIcon />}
-            label={isConnected ? "Live Data" : "Offline"}
-            color={isConnected ? "success" : "default"}
+            icon={isConnected ? <WifiTetheringIcon fontSize="small" /> : <WifiOffIcon fontSize="small" />}
+            label={isConnected ? "Live" : "Offline"}
+            color={isConnected ? "success" : "error"}
             variant={isConnected ? "filled" : "outlined"}
-            sx={{
-              fontWeight: 'medium',
-              px: 1,
-              '& .MuiChip-icon': {
-                animation: isConnected ? 'pulse 2s infinite' : 'none'
-              }
-            }}
+            size="small"
+            sx={{ fontWeight: 'medium' }}
           />
-          <Tooltip title="Refresh data">
-            <IconButton
-              color="primary"
-              sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                '&:hover': {
-                  bgcolor: alpha(theme.palette.primary.main, 0.2),
-                }
-              }}
-            >
-              <RefreshIcon />
-            </IconButton>
+          <Tooltip title={refreshing ? "Refreshing..." : "Refresh data"}>
+            <span>
+              <IconButton
+                color="primary"
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                size="small"
+                sx={{
+                  animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                }}
+              >
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
           </Tooltip>
         </Stack>
       </Box>
 
       {/* Latest readings */}
-      <Box sx={{ mb: 5 }}>
+      <Box sx={{ mb: 3 }}>
         <Box
           sx={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            mb: 3
+            mb: 2
           }}
         >
           <Typography
-            variant="h5"
+            variant="subtitle1"
             component="h2"
             sx={{ fontWeight: 'medium' }}
           >
@@ -159,22 +232,14 @@ const Dashboard = () => {
           </Typography>
 
           {latestData && (
-            <Chip
-              label={`Last updated: ${formatDateTime(latestData.timestamp)}`}
-              size="small"
-              icon={<HistoryIcon fontSize="small" />}
-              sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                color: theme.palette.text.primary,
-                fontWeight: 'medium',
-                px: 1
-              }}
-            />
+            <Typography variant="caption" color="text.secondary">
+              Last updated: {formatDateTime(latestData.timestamp)}
+            </Typography>
           )}
         </Box>
 
-        {latestData ? (
-          <Grid container spacing={3}>
+        {latestData && latestData.temperature !== undefined ? (
+          <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={4}>
               <SensorCard
                 title="Temperature"
@@ -198,33 +263,88 @@ const Dashboard = () => {
             </Grid>
           </Grid>
         ) : (
-          <Alert
-            severity="info"
-            sx={{
-              borderRadius: 2,
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-              p: 2
-            }}
-          >
-            <Typography variant="body1">
-              No sensor data available yet. Connect your sensors to start receiving data.
-            </Typography>
-          </Alert>
+          <Box>
+            <Alert
+              severity="info"
+              sx={{
+                p: 1.5,
+                mb: 2
+              }}
+            >
+              <Typography variant="body2">
+                No sensor data available yet. Connect your sensors to start receiving data.
+              </Typography>
+            </Alert>
+
+            <Paper
+              sx={{
+                p: 3,
+                textAlign: 'center',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  py: 2
+                }}
+              >
+                <ThermostatIcon
+                  sx={{
+                    fontSize: 40,
+                    color: alpha(theme.palette.primary.main, 0.3),
+                    mb: 1.5
+                  }}
+                />
+                <Typography variant="subtitle1" gutterBottom>
+                  Waiting for Sensor Data
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 500, mb: 2 }}>
+                  {isConnected
+                    ? "Your device is connected and we're waiting for data."
+                    : "Your device appears to be offline. Please check your sensor connection."}
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    startIcon={<RefreshIcon />}
+                    size="small"
+                  >
+                    {refreshing ? 'Refreshing...' : 'Refresh Data'}
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={() => window.location.reload()}
+                    size="small"
+                  >
+                    Reload Page
+                  </Button>
+                </Box>
+              </Box>
+            </Paper>
+          </Box>
         )}
       </Box>
 
       {/* Charts */}
       {sensorData.length > 0 && (
-        <Box sx={{ mb: 5 }}>
+        <Box sx={{ mb: 3 }}>
           <Typography
-            variant="h5"
+            variant="subtitle1"
             component="h2"
-            gutterBottom
-            sx={{ fontWeight: 'medium', mb: 3 }}
+            sx={{ fontWeight: 'medium', mb: 2 }}
           >
             Historical Data
           </Typography>
-          <Grid container spacing={3}>
+          <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <SensorChart
                 title="Temperature History"
@@ -243,174 +363,77 @@ const Dashboard = () => {
         </Box>
       )}
 
-      {/* Data history log */}
+      {/* Data history log - Simplified */}
       {sensorData.length > 0 && (
-        <Box sx={{ mb: 4 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: 3
-            }}
+        <Box sx={{ mb: 3 }}>
+          <Typography
+            variant="subtitle1"
+            component="h2"
+            sx={{ fontWeight: 'medium', mb: 2 }}
           >
-            <Typography
-              variant="h5"
-              component="h2"
-              sx={{ fontWeight: 'medium' }}
+            Data History Log
+          </Typography>
+
+          <Card>
+            <Box
+              sx={{
+                maxHeight: 300,
+                overflow: 'auto',
+                '&::-webkit-scrollbar': {
+                  width: '6px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                  borderRadius: '6px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.2),
+                  borderRadius: '6px',
+                },
+              }}
             >
-              Data History Log
-            </Typography>
-
-            <Tooltip title="More options">
-              <IconButton>
-                <MoreVertIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-
-          <Card
-            sx={{
-              borderRadius: 3,
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-              overflow: 'hidden'
-            }}
-          >
-            <CardContent sx={{ p: 0 }}>
-              <Box
-                sx={{
-                  maxHeight: 400,
-                  overflow: 'auto',
-                  px: 3,
-                  py: 2,
-                  '&::-webkit-scrollbar': {
-                    width: '8px',
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                    borderRadius: '10px',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                    borderRadius: '10px',
-                    '&:hover': {
-                      backgroundColor: alpha(theme.palette.primary.main, 0.3),
-                    },
-                  },
-                }}
-              >
-                {sensorData.slice().reverse().map((data, index) => (
-                  <Box
-                    key={data.id || index}
-                    sx={{
-                      mb: 2,
-                      pb: 2,
-                      borderBottom: index < sensorData.length - 1 ? `1px solid ${alpha(theme.palette.divider, 0.6)}` : 'none',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        mb: 1.5
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle1"
-                        fontWeight="medium"
-                        sx={{ color: theme.palette.text.primary }}
-                      >
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Time</TableCell>
+                    <TableCell align="right">Temp</TableCell>
+                    <TableCell align="right">Humidity</TableCell>
+                    <TableCell align="right">Obstacle</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {sensorData.slice().reverse().slice(0, 10).map((data, index) => (
+                    <TableRow key={data.id || index}>
+                      <TableCell component="th" scope="row">
                         {formatDateTime(data.timestamp)}
-                      </Typography>
-
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: theme.palette.text.secondary,
-                          bgcolor: alpha(theme.palette.background.default, 0.7),
-                          px: 1,
-                          py: 0.5,
-                          borderRadius: 1,
-                          fontWeight: 'medium'
-                        }}
-                      >
-                        ID: {data.id || 'N/A'}
-                      </Typography>
-                    </Box>
-
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} sm={4}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            p: 1.5,
-                            borderRadius: 2,
-                            bgcolor: alpha(getTemperatureColor(data.temperature), 0.1),
-                          }}
-                        >
-                          <ThermostatIcon
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: getTemperatureColor(data.temperature) }}>
+                        {data.temperature.toFixed(1)}°C
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: getHumidityColor(data.humidity) }}>
+                        {data.humidity.toFixed(1)}%
+                      </TableCell>
+                      <TableCell align="right">
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <Box
                             sx={{
-                              color: getTemperatureColor(data.temperature),
-                              mr: 1,
-                              fontSize: 20
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              bgcolor: data.obstacle ? 'error.main' : 'success.main',
+                              mr: 0.5
                             }}
                           />
-                          <Typography variant="body2" fontWeight="medium">
-                            Temperature: {data.temperature.toFixed(1)}°C
+                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                            {data.obstacle ? 'Yes' : 'No'}
                           </Typography>
                         </Box>
-                      </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            p: 1.5,
-                            borderRadius: 2,
-                            bgcolor: alpha(getHumidityColor(data.humidity), 0.1),
-                          }}
-                        >
-                          <OpacityIcon
-                            sx={{
-                              color: getHumidityColor(data.humidity),
-                              mr: 1,
-                              fontSize: 20
-                            }}
-                          />
-                          <Typography variant="body2" fontWeight="medium">
-                            Humidity: {data.humidity.toFixed(1)}%
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            p: 1.5,
-                            borderRadius: 2,
-                            bgcolor: alpha(getObstacleColor(data.obstacle), 0.1),
-                          }}
-                        >
-                          <WarningIcon
-                            sx={{
-                              color: getObstacleColor(data.obstacle),
-                              mr: 1,
-                              fontSize: 20
-                            }}
-                          />
-                          <Typography variant="body2" fontWeight="medium">
-                            Obstacle: {data.obstacle ? 'Detected' : 'Clear'}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </Box>
-                ))}
-              </Box>
-            </CardContent>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           </Card>
         </Box>
       )}

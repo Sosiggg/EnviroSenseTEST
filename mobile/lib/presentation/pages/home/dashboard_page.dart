@@ -316,9 +316,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     // Get screen width for responsive design
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360; // Extra small screen detection
-    final isMediumScreen =
-        screenWidth < 400 && screenWidth >= 360; // Medium small screen
+    // We use screenWidth directly in the UI for responsive adjustments
 
     return RefreshIndicator(
       onRefresh: () async {

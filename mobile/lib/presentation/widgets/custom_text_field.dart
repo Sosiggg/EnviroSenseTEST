@@ -9,9 +9,12 @@ class CustomTextField extends StatelessWidget {
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
   final void Function(String)? onChanged;
+  final void Function(String)? onFieldSubmitted;
   final int maxLines;
   final bool enabled;
-  
+  final TextInputAction? textInputAction;
+  final String? hintText;
+
   const CustomTextField({
     super.key,
     required this.controller,
@@ -22,8 +25,11 @@ class CustomTextField extends StatelessWidget {
     this.keyboardType = TextInputType.text,
     this.validator,
     this.onChanged,
+    this.onFieldSubmitted,
     this.maxLines = 1,
     this.enabled = true,
+    this.textInputAction,
+    this.hintText,
   });
 
   @override
@@ -34,14 +40,19 @@ class CustomTextField extends StatelessWidget {
       keyboardType: keyboardType,
       validator: validator,
       onChanged: onChanged,
+      onFieldSubmitted: onFieldSubmitted,
       maxLines: maxLines,
       enabled: enabled,
+      textInputAction: textInputAction,
       decoration: InputDecoration(
         labelText: labelText,
+        hintText: hintText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         suffixIcon: suffixIcon,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
         ),
       ),
     );

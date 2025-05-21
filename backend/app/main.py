@@ -7,29 +7,59 @@ from app.db.init_db import create_tables
 
 app = FastAPI(title="EnviroSense API")
 
-origins = [
+# Define allowed origins based on environment
+# In production, you should list specific origins instead of using "*"
+# Get environment variable to determine if we're in development or production
+import os
+is_development = os.getenv("ENVIRONMENT", "development").lower() == "development"
+
+# Define specific origins for different environments
+web_origins = [
+    # Local development origins
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
     "http://localhost:5173",
     "http://localhost:8081",
     "http://localhost:8000",
     "http://localhost:9101",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
+    "http://127.0.0.1:3003",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:9101",
-    "http://127.0.0.1:*",
-    "http://localhost:*",
+    # Production origins
     "https://envirosense-2khv.onrender.com",
     "https://envirosense-2khv.onrender.com:443",
-    # Allow all origins during development
-    "*"
+    "https://envirosense-web.netlify.app",
 ]
+
+# In development, allow all origins for easier testing
+origins = ["*"] if is_development else web_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+        "Access-Control-Allow-Origin",
+    ],
+    expose_headers=[
+        "Content-Length",
+        "Content-Type",
+        "X-Total-Count"
+    ],
+    max_age=600  # Cache preflight requests for 10 minutes
 )
 
 # Create database tables on startup

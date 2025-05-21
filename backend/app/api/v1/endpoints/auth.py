@@ -16,6 +16,7 @@ from app.core.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from app.core import db_utils
+from app.core.email import send_token_email, send_password_reset_email
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.token import Token
@@ -24,7 +25,7 @@ from app.schemas.user import UserCreate, User as UserSchema, UserUpdate, Passwor
 # Create logger
 logger = logging.getLogger(__name__)
 
-# Define request models for forgot password and reset password
+# Define request models for various auth operations
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -32,6 +33,9 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
     email: EmailStr  # Added for demo purposes
+
+class EmailTokenRequest(BaseModel):
+    email: EmailStr
 
 router = APIRouter()
 
@@ -171,12 +175,9 @@ async def forgot_password(
 ):
     """
     Handle forgot password request.
-    In a production environment, this would:
     1. Generate a password reset token
     2. Store it in the database with an expiration time
-    3. Send an email with a link to reset the password
-
-    For this demo, we'll just log the request and return a success message.
+    3. Send an email with the reset token
     """
     try:
         # Use our safe db_utils function to get the user
@@ -190,7 +191,7 @@ async def forgot_password(
         # Generate a reset token
         reset_token = secrets.token_urlsafe(32)
 
-        # Log the token for demo purposes
+        # Log the token for debugging purposes
         logger.info(f"Password reset requested for user: {user['username']}")
         logger.info(f"Reset token generated: {reset_token}")
 
@@ -203,10 +204,69 @@ async def forgot_password(
         else:
             logger.warning("Token could not be stored in database - it will only be logged")
 
+        # Send the password reset email
+        email_sent = await send_password_reset_email(
+            email_to=request.email,
+            reset_token=reset_token,
+            username=user['username']
+        )
+
+        if email_sent:
+            logger.info(f"Password reset email sent to {request.email}")
+        else:
+            logger.warning(f"Failed to send password reset email to {request.email}")
+
         return {"message": "If your email is registered, you will receive password reset instructions."}
 
     except Exception as e:
         logger.error(f"Unexpected error in forgot_password: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )
+
+@router.post("/email-token", status_code=status.HTTP_200_OK)
+async def send_auth_token_email(
+    request: EmailTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate an authentication token and send it to the user's email.
+    """
+    try:
+        # Use our safe db_utils function to get the user
+        user = db_utils.get_user_by_email(db, request.email)
+
+        if not user:
+            # Don't reveal that the user doesn't exist
+            logger.info(f"Token email request for non-existent email: {request.email}")
+            return {"message": "If your email is registered, you will receive an authentication token."}
+
+        # Generate an access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user['username']}, expires_delta=access_token_expires
+        )
+
+        # Log the token for debugging purposes
+        logger.info(f"Authentication token generated for user: {user['username']}")
+
+        # Send the token email
+        email_sent = await send_token_email(
+            email_to=request.email,
+            token=access_token,
+            username=user['username']
+        )
+
+        if email_sent:
+            logger.info(f"Authentication token email sent to {request.email}")
+        else:
+            logger.warning(f"Failed to send authentication token email to {request.email}")
+
+        return {"message": "If your email is registered, you will receive an authentication token."}
+
+    except Exception as e:
+        logger.error(f"Unexpected error in send_auth_token_email: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred"

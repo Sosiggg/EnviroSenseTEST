@@ -2,10 +2,10 @@
 export const formatDateTime = (dateString) => {
   try {
     const date = new Date(dateString);
-    
+
     // Convert to Manila time (GMT+8)
     const manilaTime = new Date(date.getTime() + (8 * 60 * 60 * 1000));
-    
+
     // Format in 12-hour format
     return manilaTime.toLocaleString('en-US', {
       year: 'numeric',
@@ -63,38 +63,132 @@ export const getObstacleColor = (obstacle) => {
 
 // Generate chart data for temperature
 export const generateTemperatureChartData = (sensorData) => {
-  const labels = sensorData.map(data => formatDateTime(data.timestamp));
-  const data = sensorData.map(data => data.temperature);
-  
-  return {
-    labels,
-    datasets: [
-      {
-        label: 'Temperature (°C)',
-        data,
-        borderColor: '#f44336',
-        backgroundColor: 'rgba(244, 67, 54, 0.1)',
-        tension: 0.4,
-      },
-    ],
-  };
+  // Validate input
+  if (!sensorData || !Array.isArray(sensorData) || sensorData.length === 0) {
+    console.warn('Invalid or empty sensor data for temperature chart');
+    return {
+      labels: [],
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: '#f44336',
+          backgroundColor: 'rgba(244, 67, 54, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  }
+
+  try {
+    // Filter out any invalid data points
+    const validData = sensorData.filter(data =>
+      data &&
+      data.timestamp &&
+      data.temperature !== undefined &&
+      data.temperature !== null
+    );
+
+    const labels = validData.map(data => formatDateTime(data.timestamp));
+    const data = validData.map(data => {
+      // Ensure temperature is a number
+      const temp = typeof data.temperature === 'string'
+        ? parseFloat(data.temperature)
+        : data.temperature;
+      return isNaN(temp) ? 0 : temp;
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data,
+          borderColor: '#f44336',
+          backgroundColor: 'rgba(244, 67, 54, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  } catch (error) {
+    console.error('Error generating temperature chart data:', error);
+    return {
+      labels: [],
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: '#f44336',
+          backgroundColor: 'rgba(244, 67, 54, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  }
 };
 
 // Generate chart data for humidity
 export const generateHumidityChartData = (sensorData) => {
-  const labels = sensorData.map(data => formatDateTime(data.timestamp));
-  const data = sensorData.map(data => data.humidity);
-  
-  return {
-    labels,
-    datasets: [
-      {
-        label: 'Humidity (%)',
-        data,
-        borderColor: '#2196f3',
-        backgroundColor: 'rgba(33, 150, 243, 0.1)',
-        tension: 0.4,
-      },
-    ],
-  };
+  // Validate input
+  if (!sensorData || !Array.isArray(sensorData) || sensorData.length === 0) {
+    console.warn('Invalid or empty sensor data for humidity chart');
+    return {
+      labels: [],
+      datasets: [
+        {
+          label: 'Humidity (%)',
+          data: [],
+          borderColor: '#2196f3',
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  }
+
+  try {
+    // Filter out any invalid data points
+    const validData = sensorData.filter(data =>
+      data &&
+      data.timestamp &&
+      data.humidity !== undefined &&
+      data.humidity !== null
+    );
+
+    const labels = validData.map(data => formatDateTime(data.timestamp));
+    const data = validData.map(data => {
+      // Ensure humidity is a number
+      const humidity = typeof data.humidity === 'string'
+        ? parseFloat(data.humidity)
+        : data.humidity;
+      return isNaN(humidity) ? 0 : humidity;
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Humidity (%)',
+          data,
+          borderColor: '#2196f3',
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  } catch (error) {
+    console.error('Error generating humidity chart data:', error);
+    return {
+      labels: [],
+      datasets: [
+        {
+          label: 'Humidity (%)',
+          data: [],
+          borderColor: '#2196f3',
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  }
 };

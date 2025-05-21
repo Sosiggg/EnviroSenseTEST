@@ -39,6 +39,10 @@ class RequestCancelledException extends ApiException {
   const RequestCancelledException(super.message);
 }
 
+class TooManyRequestsException extends ApiException {
+  const TooManyRequestsException(super.message);
+}
+
 class UnknownException extends ApiException {
   const UnknownException(super.message);
 }

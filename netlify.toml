@@ -1,0 +1,23 @@
+[build]
+  base = "web"
+  publish = "build"
+  command = "npm run build"
+
+# Handle SPA routing - redirect all paths to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Environment variable configuration
+[context.production.environment]
+  REACT_APP_API_URL = "https://envirosense-2khv.onrender.com/api/v1"
+  REACT_APP_ENV = "production"
+
+[context.deploy-preview.environment]
+  REACT_APP_API_URL = "https://envirosense-2khv.onrender.com/api/v1"
+  REACT_APP_ENV = "preview"
+
+[context.branch-deploy.environment]
+  REACT_APP_API_URL = "https://envirosense-2khv.onrender.com/api/v1"
+  REACT_APP_ENV = "development"

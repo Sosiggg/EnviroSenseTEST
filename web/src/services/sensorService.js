@@ -4,11 +4,41 @@ import websocketManager from '../utils/websocket';
 // Get sensor data for current user
 export const getSensorData = async () => {
   try {
+    console.log('Fetching sensor data from API...');
     const response = await api.get('/sensor/data');
-    return response.data;
+    console.log('Sensor data received:', response.data);
+
+    // Check if response.data is valid
+    if (!response.data) {
+      console.error('API returned empty data');
+      return [];
+    }
+
+    // Handle both array and single object responses
+    if (Array.isArray(response.data)) {
+      return response.data;
+    } else if (typeof response.data === 'object') {
+      // If it's a single object with sensor data
+      if (response.data.temperature !== undefined) {
+        console.log('API returned a single sensor data object');
+        return [response.data]; // Return as array with single item
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        // If data is nested in a 'data' property
+        console.log('API returned data in a nested property');
+        return response.data.data;
+      } else {
+        console.error('API returned an object but not in expected format:', response.data);
+        return [];
+      }
+    } else {
+      console.error('API returned unexpected data type:', typeof response.data);
+      return [];
+    }
   } catch (error) {
     console.error('Get sensor data error:', error);
-    throw error;
+    console.error('Error details:', error.response?.data || 'No response data');
+    // Return empty array instead of throwing to prevent app crashes
+    return [];
   }
 };
 

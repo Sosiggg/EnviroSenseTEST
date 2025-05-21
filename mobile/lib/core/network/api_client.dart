@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
+import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:flutter/foundation.dart';
 // Temporarily using shared_preferences instead of flutter_secure_storage
 // import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/api_constants.dart';
 import '../errors/api_exceptions.dart';
+import 'network_utils.dart';
 
 class ApiClient {
   late Dio _dio; // Removed 'final' to allow resetting
@@ -51,7 +54,60 @@ class ApiClient {
       );
     }
 
-    // Add interceptors
+    // Setup cache options
+    final cacheOptions = CacheOptions(
+      // A default store is required for interceptor
+      store: MemCacheStore(),
+      // Default policy is now CACHE_FIRST
+      policy: CachePolicy.refreshForceCache,
+      // Optional: Specify a cache key builder
+      keyBuilder: CacheOptions.defaultCacheKeyBuilder,
+      // Default max cache age is 7 days
+      maxStale: const Duration(days: 7),
+      // Default cache priority is CachePriority.normal
+      priority: CachePriority.high,
+      // Default behavior is to hit network when cached response is stale
+      hitCacheOnErrorExcept: [401, 403],
+    );
+
+    // Add cache interceptor
+    _dio.interceptors.add(DioCacheInterceptor(options: cacheOptions));
+
+    // Add retry interceptor
+    _dio.interceptors.add(
+      RetryInterceptor(
+        dio: _dio,
+        logPrint: (message) {
+          if (kDebugMode) {
+            print('RetryInterceptor: $message');
+          }
+        },
+        retries: 3, // Number of retries
+        retryDelays: const [
+          Duration(seconds: 1), // Wait 1 second before first retry
+          Duration(seconds: 2), // Wait 2 seconds before second retry
+          Duration(seconds: 4), // Wait 4 seconds before third retry
+        ],
+        retryEvaluator: (error, attempt) {
+          // Don't retry for client errors (except 429 Too Many Requests)
+          if (error.response != null) {
+            final statusCode = error.response!.statusCode;
+            if (statusCode != null &&
+                statusCode >= 400 &&
+                statusCode < 500 &&
+                statusCode != 429) {
+              return false;
+            }
+          }
+
+          // Retry for network errors, timeouts, and server errors
+          return error.type != DioExceptionType.cancel &&
+              error.type != DioExceptionType.badResponse;
+        },
+      ),
+    );
+
+    // Add auth interceptor
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -115,40 +171,83 @@ class ApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? queryParameters,
+    bool useCache = true,
   }) async {
-    try {
-      final response = await _dio.get(path, queryParameters: queryParameters);
-
-      // Handle different response types
-      if (response.data is Map<String, dynamic>) {
-        return response.data;
-      } else if (response.data is String) {
+    // Use NetworkUtils for retry logic and circuit breaker
+    return NetworkUtils.executeWithRetry(
+      function: () async {
         try {
-          // Try to parse string as JSON
-          return jsonDecode(response.data);
+          // Set cache policy based on useCache parameter
+          CachePolicy? cachePolicy;
+          if (useCache) {
+            cachePolicy = CachePolicy.refreshForceCache;
+          } else {
+            cachePolicy = CachePolicy.noCache;
+          }
+
+          // Make the request with optional cache policy
+          final response = await _dio.get(
+            path,
+            queryParameters: queryParameters,
+            options:
+                useCache
+                    ? Options(
+                      extra: {
+                        'dio_cache_interceptor_options':
+                            CacheOptions(
+                              store: MemCacheStore(),
+                              policy: cachePolicy,
+                              keyBuilder: CacheOptions.defaultCacheKeyBuilder,
+                            ).toExtra(),
+                      },
+                    )
+                    : null,
+          );
+
+          // Log the response for debugging
+          if (kDebugMode) {
+            print('GET response status: ${response.statusCode}');
+            print('GET response data: ${response.data}');
+          }
+
+          // Handle different response types
+          if (response.data is Map<String, dynamic>) {
+            return response.data;
+          } else if (response.data is String) {
+            try {
+              // Try to parse string as JSON
+              return jsonDecode(response.data);
+            } catch (e) {
+              // If it's not valid JSON, return as a message
+              return {
+                'message': response.data,
+                'statusCode': response.statusCode,
+              };
+            }
+          } else if (response.data == null) {
+            return {
+              'message': 'No data returned',
+              'statusCode': response.statusCode,
+            };
+          } else {
+            // For any other type, convert to string and return as message
+            return {
+              'message': response.data.toString(),
+              'statusCode': response.statusCode,
+            };
+          }
+        } on DioException catch (e) {
+          throw _handleError(e);
+        } on SocketException {
+          throw const NetworkException('No internet connection');
         } catch (e) {
-          // If it's not valid JSON, return as a message
-          return {'message': response.data, 'statusCode': response.statusCode};
+          throw UnknownException(e.toString());
         }
-      } else if (response.data == null) {
-        return {
-          'message': 'No data returned',
-          'statusCode': response.statusCode,
-        };
-      } else {
-        // For any other type, convert to string and return as message
-        return {
-          'message': response.data.toString(),
-          'statusCode': response.statusCode,
-        };
-      }
-    } on DioException catch (e) {
-      throw _handleError(e);
-    } on SocketException {
-      throw const NetworkException('No internet connection');
-    } catch (e) {
-      throw UnknownException(e.toString());
-    }
+      },
+      maxRetries: 3,
+      retryDelay: const Duration(seconds: 1),
+      useExponentialBackoff: true,
+    );
   }
 
   // POST request

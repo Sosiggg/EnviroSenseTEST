@@ -14,12 +14,10 @@ import {
   ListItemText,
   Toolbar,
   Typography,
-  Button,
   useMediaQuery,
   useTheme,
   Avatar,
   Tooltip,
-  Badge,
   alpha
 } from '@mui/material';
 import {
@@ -30,25 +28,24 @@ import {
   Logout as LogoutIcon,
   Thermostat as ThermostatIcon,
   Opacity as OpacityIcon,
-  Notifications as NotificationsIcon,
-  Settings as SettingsIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useSensor } from '../context/SensorContext';
+import { useThemeContext } from '../context/ThemeContext';
 
 const drawerWidth = 260;
 
 const Layout = () => {
   const { user, logout } = useAuth();
   const { latestData, isConnected } = useSensor();
+  const { isDarkMode, toggleTheme } = useThemeContext();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -64,10 +61,6 @@ const Layout = () => {
   const handleLogout = () => {
     logout();
     navigate('/login');
-  };
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
   };
 
   // Get user initials for avatar
@@ -220,11 +213,11 @@ const Layout = () => {
         <Divider />
         <List>
           <ListItem disablePadding>
-            <ListItemButton onClick={toggleDarkMode}>
+            <ListItemButton onClick={toggleTheme}>
               <ListItemIcon>
-                {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+                {isDarkMode ? <LightModeIcon /> : <DarkModeIcon />}
               </ListItemIcon>
-              <ListItemText primary={darkMode ? "Light Mode" : "Dark Mode"} />
+              <ListItemText primary={isDarkMode ? "Light Mode" : "Dark Mode"} />
             </ListItemButton>
           </ListItem>
           <ListItem disablePadding>
@@ -308,20 +301,6 @@ const Layout = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Tooltip title="Notifications">
-              <IconButton color="inherit" sx={{ mr: 1 }}>
-                <Badge badgeContent={0} color="error">
-                  <NotificationsIcon />
-                </Badge>
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title="Settings">
-              <IconButton color="inherit" sx={{ mr: 2 }}>
-                <SettingsIcon />
-              </IconButton>
-            </Tooltip>
-
             {user && (
               <Tooltip title={`Logged in as ${user.username}`}>
                 <Avatar
@@ -398,22 +377,25 @@ const Layout = () => {
         <Outlet />
       </Box>
 
-      <style jsx global>{`
-        @keyframes pulse {
-          0% {
-            opacity: 0.5;
-            transform: scale(0.8);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.2);
-          }
-          100% {
-            opacity: 0.5;
-            transform: scale(0.8);
-          }
-        }
-      `}</style>
+      {/* Global styles for animations */}
+      <Box
+        sx={{
+          '@keyframes pulse': {
+            '0%': {
+              opacity: 0.5,
+              transform: 'scale(0.8)',
+            },
+            '50%': {
+              opacity: 1,
+              transform: 'scale(1.2)',
+            },
+            '100%': {
+              opacity: 0.5,
+              transform: 'scale(0.8)',
+            },
+          },
+        }}
+      />
     </Box>
   );
 };

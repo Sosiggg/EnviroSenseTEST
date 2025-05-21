@@ -47,40 +47,30 @@ const SensorChart = ({ title, type, data }) => {
 
   const color = getColor();
 
-  // Generate chart data based on type
-  const chartData = type === 'temperature'
-    ? generateTemperatureChartData(data)
-    : generateHumidityChartData(data);
-
-  // Customize chart data with gradients
-  const customizeChartData = (canvas) => {
-    const ctx = canvas.getContext('2d');
-
-    // Create gradient for background
-    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, alpha(color, 0.3));
-    gradient.addColorStop(1, alpha(color, 0.0));
-
-    // Apply gradient to dataset
-    const customData = { ...chartData };
-    if (customData.datasets && customData.datasets.length > 0) {
-      customData.datasets[0] = {
-        ...customData.datasets[0],
-        backgroundColor: gradient,
-        borderColor: color,
-        borderWidth: 2,
-        pointBackgroundColor: color,
-        pointBorderColor: '#fff',
-        pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: color,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        fill: true,
+  // Generate chart data based on type and ensure it's valid
+  const generateChartData = () => {
+    // Ensure data is an array and has valid items
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return {
+        labels: [],
+        datasets: [{
+          label: type === 'temperature' ? 'Temperature (°C)' : 'Humidity (%)',
+          data: [],
+          borderColor: color,
+          backgroundColor: alpha(color, 0.1),
+          tension: 0.4,
+        }]
       };
     }
 
-    return customData;
+    // Generate chart data based on type
+    return type === 'temperature'
+      ? generateTemperatureChartData(data)
+      : generateHumidityChartData(data);
   };
+
+  // Create a stable reference to chart data
+  const chartData = generateChartData();
 
   // Chart options
   const options = {
@@ -202,34 +192,28 @@ const SensorChart = ({ title, type, data }) => {
     <Card
       sx={{
         height: '100%',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          transform: 'translateY(-5px)',
-          boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)',
-        },
       }}
     >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <CardContent sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 40,
-                height: 40,
-                borderRadius: '12px',
+                width: 32,
+                height: 32,
+                borderRadius: '6px',
                 backgroundColor: alpha(color, 0.1),
                 color: color,
-                mr: 2
+                mr: 1.5
               }}
             >
               {getIcon()}
             </Box>
             <Typography
-              variant="h6"
+              variant="subtitle1"
               component="div"
               sx={{ fontWeight: 'medium' }}
             >
@@ -238,23 +222,47 @@ const SensorChart = ({ title, type, data }) => {
           </Box>
 
           <Chip
-            label={type === 'temperature' ? 'Last 24 hours' : 'Last 24 hours'}
+            label="24h"
             size="small"
             sx={{
               bgcolor: alpha(theme.palette.primary.main, 0.1),
               color: theme.palette.primary.main,
               fontWeight: 'medium',
-              fontSize: '0.75rem'
+              fontSize: '0.7rem',
+              height: 24,
+              px: 0.5
             }}
           />
         </Box>
 
-        <Box sx={{ height: 300, position: 'relative' }}>
-          {data.length > 0 ? (
+        <Box sx={{ height: 240, position: 'relative' }}>
+          {data && Array.isArray(data) && data.length > 0 ? (
             <Line
               ref={chartRef}
               options={options}
-              data={(canvas) => customizeChartData(canvas)}
+              data={chartData}
+              plugins={[
+                {
+                  id: 'customCanvasBackgroundColor',
+                  beforeDraw: (chart) => {
+                    const ctx = chart.canvas.getContext('2d');
+                    if (!ctx) return;
+
+                    // Apply gradient to dataset if possible
+                    try {
+                      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+                      gradient.addColorStop(0, alpha(color, 0.2));
+                      gradient.addColorStop(1, alpha(color, 0.0));
+
+                      if (chart.data.datasets && chart.data.datasets.length > 0) {
+                        chart.data.datasets[0].backgroundColor = gradient;
+                      }
+                    } catch (error) {
+                      console.error('Error applying gradient:', error);
+                    }
+                  }
+                }
+              ]}
             />
           ) : (
             <Box
@@ -265,73 +273,129 @@ const SensorChart = ({ title, type, data }) => {
                 alignItems: 'center',
                 height: '100%',
                 bgcolor: alpha(theme.palette.background.paper, 0.5),
-                borderRadius: 2,
-                p: 3
+                borderRadius: 1,
+                p: 2
               }}
             >
               <TimelineIcon
                 sx={{
-                  fontSize: 40,
+                  fontSize: 32,
                   color: alpha(theme.palette.text.secondary, 0.3),
-                  mb: 2
+                  mb: 1
                 }}
               />
-              <Typography variant="body1" color="text.secondary" align="center">
+              <Typography variant="body2" color="text.secondary" align="center">
                 No data available yet
-              </Typography>
-              <Typography variant="body2" color="text.disabled" align="center" sx={{ mt: 1 }}>
-                Data will appear here once sensors start sending readings
               </Typography>
             </Box>
           )}
         </Box>
 
-        {data.length > 0 && (
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-            <Typography variant="caption" color="text.secondary">
-              {type === 'temperature' ? 'Min: ' : 'Min: '}
+        {data && Array.isArray(data) && data.length > 0 && (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              mt: 1.5,
+              pt: 1.5,
+              borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+            }}
+          >
+            <Box>
+              <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                Min
+              </Typography>
               <Typography
-                component="span"
-                variant="caption"
+                variant="body2"
                 fontWeight="medium"
                 color={color}
               >
-                {type === 'temperature'
-                  ? `${Math.min(...data.map(d => d.temperature)).toFixed(1)}°C`
-                  : `${Math.min(...data.map(d => d.humidity)).toFixed(1)}%`
-                }
-              </Typography>
-            </Typography>
+                {(() => {
+                  try {
+                    // Get valid values for the calculation
+                    const values = type === 'temperature'
+                      ? data.filter(d => d && d.temperature !== undefined && d.temperature !== null)
+                          .map(d => typeof d.temperature === 'string' ? parseFloat(d.temperature) : d.temperature)
+                          .filter(val => !isNaN(val))
+                      : data.filter(d => d && d.humidity !== undefined && d.humidity !== null)
+                          .map(d => typeof d.humidity === 'string' ? parseFloat(d.humidity) : d.humidity)
+                          .filter(val => !isNaN(val));
 
-            <Typography variant="caption" color="text.secondary">
-              {type === 'temperature' ? 'Avg: ' : 'Avg: '}
-              <Typography
-                component="span"
-                variant="caption"
-                fontWeight="medium"
-                color={color}
-              >
-                {type === 'temperature'
-                  ? `${(data.reduce((sum, d) => sum + d.temperature, 0) / data.length).toFixed(1)}°C`
-                  : `${(data.reduce((sum, d) => sum + d.humidity, 0) / data.length).toFixed(1)}%`
-                }
-              </Typography>
-            </Typography>
+                    if (values.length === 0) return type === 'temperature' ? '0.0°C' : '0.0%';
 
-            <Typography variant="caption" color="text.secondary">
-              {type === 'temperature' ? 'Max: ' : 'Max: '}
+                    const min = Math.min(...values);
+                    return type === 'temperature' ? `${min.toFixed(1)}°C` : `${min.toFixed(1)}%`;
+                  } catch (error) {
+                    console.error('Error calculating min:', error);
+                    return type === 'temperature' ? '0.0°C' : '0.0%';
+                  }
+                })()}
+              </Typography>
+            </Box>
+
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                Avg
+              </Typography>
               <Typography
-                component="span"
-                variant="caption"
+                variant="body2"
                 fontWeight="medium"
                 color={color}
               >
-                {type === 'temperature'
-                  ? `${Math.max(...data.map(d => d.temperature)).toFixed(1)}°C`
-                  : `${Math.max(...data.map(d => d.humidity)).toFixed(1)}%`
-                }
+                {(() => {
+                  try {
+                    // Get valid values for the calculation
+                    const values = type === 'temperature'
+                      ? data.filter(d => d && d.temperature !== undefined && d.temperature !== null)
+                          .map(d => typeof d.temperature === 'string' ? parseFloat(d.temperature) : d.temperature)
+                          .filter(val => !isNaN(val))
+                      : data.filter(d => d && d.humidity !== undefined && d.humidity !== null)
+                          .map(d => typeof d.humidity === 'string' ? parseFloat(d.humidity) : d.humidity)
+                          .filter(val => !isNaN(val));
+
+                    if (values.length === 0) return type === 'temperature' ? '0.0°C' : '0.0%';
+
+                    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+                    return type === 'temperature' ? `${avg.toFixed(1)}°C` : `${avg.toFixed(1)}%`;
+                  } catch (error) {
+                    console.error('Error calculating average:', error);
+                    return type === 'temperature' ? '0.0°C' : '0.0%';
+                  }
+                })()}
               </Typography>
-            </Typography>
+            </Box>
+
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                Max
+              </Typography>
+              <Typography
+                variant="body2"
+                fontWeight="medium"
+                color={color}
+              >
+                {(() => {
+                  try {
+                    // Get valid values for the calculation
+                    const values = type === 'temperature'
+                      ? data.filter(d => d && d.temperature !== undefined && d.temperature !== null)
+                          .map(d => typeof d.temperature === 'string' ? parseFloat(d.temperature) : d.temperature)
+                          .filter(val => !isNaN(val))
+                      : data.filter(d => d && d.humidity !== undefined && d.humidity !== null)
+                          .map(d => typeof d.humidity === 'string' ? parseFloat(d.humidity) : d.humidity)
+                          .filter(val => !isNaN(val));
+
+                    if (values.length === 0) return type === 'temperature' ? '0.0°C' : '0.0%';
+
+                    const max = Math.max(...values);
+                    return type === 'temperature' ? `${max.toFixed(1)}°C` : `${max.toFixed(1)}%`;
+                  } catch (error) {
+                    console.error('Error calculating max:', error);
+                    return type === 'temperature' ? '0.0°C' : '0.0%';
+                  }
+                })()}
+              </Typography>
+            </Box>
           </Box>
         )}
       </CardContent>

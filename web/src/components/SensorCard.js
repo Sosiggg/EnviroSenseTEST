@@ -80,47 +80,38 @@ const SensorCard = ({ title, value, type, icon }) => {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'all 0.3s ease',
-        overflow: 'visible',
         position: 'relative',
-        '&:hover': {
-          transform: 'translateY(-5px)',
-          boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)',
-        },
       }}
     >
-      <Box
-        sx={{
-          position: 'absolute',
-          top: -15,
-          left: 20,
-          width: 50,
-          height: 50,
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: alpha(color, 0.9),
-          color: '#fff',
-          boxShadow: `0 4px 12px ${alpha(color, 0.4)}`,
-        }}
-      >
-        <IconComponent fontSize="medium" />
-      </Box>
-
-      <CardContent sx={{ pt: 4, pb: 3, px: 3, flexGrow: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, mt: 1 }}>
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{
-              fontWeight: 'medium',
-              color: 'text.primary',
-              ml: 5
-            }}
-          >
-            {title}
-          </Typography>
+      <CardContent sx={{ p: 2, flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                borderRadius: '6px',
+                backgroundColor: alpha(color, 0.1),
+                color: color,
+                mr: 1.5
+              }}
+            >
+              <IconComponent fontSize="small" />
+            </Box>
+            <Typography
+              variant="subtitle1"
+              component="div"
+              sx={{
+                fontWeight: 'medium',
+                color: 'text.primary',
+              }}
+            >
+              {title}
+            </Typography>
+          </Box>
 
           {type !== 'obstacle' && (
             <Typography
@@ -128,10 +119,11 @@ const SensorCard = ({ title, value, type, icon }) => {
               sx={{
                 color: 'text.secondary',
                 bgcolor: alpha(color, 0.1),
-                px: 1.5,
+                px: 1,
                 py: 0.5,
-                borderRadius: 10,
-                fontWeight: 'medium'
+                borderRadius: 4,
+                fontWeight: 'medium',
+                fontSize: '0.7rem'
               }}
             >
               {type === 'temperature' ? 'Celsius' : 'Percent'}
@@ -146,11 +138,9 @@ const SensorCard = ({ title, value, type, icon }) => {
             fontWeight: 'bold',
             color,
             textAlign: 'center',
-            my: 2,
-            fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
-            transition: 'all 0.5s ease',
-            position: 'relative',
-            height: '3.5rem',
+            my: 1.5,
+            fontSize: { xs: '1.8rem', sm: '2.2rem', md: '2.5rem' },
+            height: '2.8rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -160,12 +150,12 @@ const SensorCard = ({ title, value, type, icon }) => {
         </Typography>
 
         {type !== 'obstacle' && (
-          <Box sx={{ mt: 3, mb: 1 }}>
+          <Box sx={{ mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
                 {type === 'temperature' ? '0°C' : '0%'}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
                 {type === 'temperature' ? '50°C' : '100%'}
               </Typography>
             </Box>
@@ -173,12 +163,12 @@ const SensorCard = ({ title, value, type, icon }) => {
               variant="determinate"
               value={progressValue}
               sx={{
-                height: 8,
-                borderRadius: 4,
+                height: 6,
+                borderRadius: 3,
                 bgcolor: alpha(color, 0.1),
                 '& .MuiLinearProgress-bar': {
                   bgcolor: color,
-                  borderRadius: 4,
+                  borderRadius: 3,
                 }
               }}
             />
@@ -196,12 +186,11 @@ const SensorCard = ({ title, value, type, icon }) => {
           >
             <Box
               sx={{
-                width: 12,
-                height: 12,
+                width: 10,
+                height: 10,
                 borderRadius: '50%',
                 bgcolor: value ? 'error.main' : 'success.main',
                 mr: 1,
-                animation: value ? 'pulse 1.5s infinite' : 'none'
               }}
             />
             <Typography
