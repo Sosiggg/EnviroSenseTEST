@@ -111,15 +111,67 @@ export const login = async (username, password) => {
 // Register user
 export const register = async (username, email, password) => {
   try {
-    const response = await api.post('/auth/register', {
-      username,
-      email,
-      password,
-    });
+    console.log('Attempting to register user:', { username, email });
 
-    return response.data;
+    // Add retry logic for registration
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastError = null;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        console.log(`Registration attempt ${attempts}/${maxAttempts}`);
+
+        const response = await api.post('/auth/register', {
+          username,
+          email,
+          password,
+        });
+
+        console.log('Registration successful:', response.status);
+        return response.data;
+      } catch (attemptError) {
+        console.error(`Registration attempt ${attempts} failed:`, attemptError.message);
+        lastError = attemptError;
+
+        // Only retry on network errors or 500 errors
+        if (attemptError.message !== 'Network Error' &&
+            !(attemptError.response && attemptError.response.status >= 500)) {
+          throw attemptError; // Don't retry on client errors
+        }
+
+        // Wait before retrying
+        if (attempts < maxAttempts) {
+          const delay = 1000 * attempts; // Increasing delay
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // If we get here, all attempts failed
+    throw lastError || new Error('Registration failed after multiple attempts');
   } catch (error) {
     console.error('Registration error:', error);
+
+    // Enhance error message for better user feedback
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      if (error.response.status === 400) {
+        if (error.response.data.detail?.includes('Username already registered')) {
+          error.message = 'This username is already taken. Please choose another one.';
+        } else if (error.response.data.detail?.includes('Email already registered')) {
+          error.message = 'This email is already registered. Please use another email or try logging in.';
+        } else {
+          error.message = error.response.data.detail || 'Invalid registration data. Please check your information.';
+        }
+      } else if (error.response.status === 500) {
+        error.message = 'Server error during registration. Please try again later.';
+      }
+    }
+
     throw error;
   }
 };

@@ -22,6 +22,26 @@ export const formatDateTime = (dateString) => {
   }
 };
 
+// Format date for chart labels - more compact to prevent overlap
+export const formatChartDateTime = (dateString) => {
+  try {
+    const date = new Date(dateString);
+
+    // Convert to Manila time (GMT+8)
+    const manilaTime = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+
+    // Format time only (for closely spaced data points)
+    return manilaTime.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch (error) {
+    console.error('Error formatting chart date:', error);
+    return '';
+  }
+};
+
 // Format temperature with unit
 export const formatTemperature = (temp) => {
   if (temp === null || temp === undefined) return 'N/A';

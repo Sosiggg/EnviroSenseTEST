@@ -375,7 +375,7 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "Don't have an account?",
+                          "",
                           style: TextStyle(fontSize: isSmallScreen ? 13 : 14),
                         ),
                         TextButton(
@@ -392,7 +392,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           child: Text(
-                            'Register',
+                            '',
                             style: TextStyle(
                               fontSize: isSmallScreen ? 13 : 14,
                               fontWeight: FontWeight.bold,

@@ -154,21 +154,28 @@ export const SensorProvider = ({ children }) => {
           // Handle connection status messages
           if (data.type === 'connection') {
             console.log('Connection status update:', data.status);
-            setIsConnected(data.status === 'connected');
 
-            if (data.status === 'error') {
-              console.error('WebSocket connection error:', data.error);
+            // Update connection status based on the status field
+            const connected = data.status === 'connected';
+            setIsConnected(connected);
+
+            // Handle error states
+            if (['error', 'failed', 'timeout'].includes(data.status)) {
+              console.error('WebSocket connection issue:', data.message || data.error);
 
               if (USE_MOCK_DATA) {
                 // Don't show error if using mock data
                 console.log('Using mock data - ignoring WebSocket error');
               } else {
-                // Show detailed error information
-                const errorDetails = data.details ? JSON.stringify(data.details) : '';
-                const errorMessage = `WebSocket connection error: ${data.error || 'Unknown error'}. ${errorDetails}`;
+                // Show user-friendly error message
+                const errorMessage = data.message ||
+                  `Connection error: ${data.error || 'Unable to connect to sensor data'}`;
                 console.error(errorMessage);
                 setError(errorMessage);
               }
+            } else if (data.status === 'connected') {
+              // Clear any existing error when connection is successful
+              setError(null);
             }
             return;
           }
@@ -308,6 +315,11 @@ export const SensorProvider = ({ children }) => {
     } catch (error) {
       console.error('Refresh sensor data error:', error);
 
+      // Extract error message from response if available
+      const errorMessage = error.response?.data?.detail ||
+                          error.message ||
+                          'Failed to refresh sensor data. Please check your connection and try again.';
+
       if (USE_MOCK_DATA) {
         // Fall back to mock data on error
         console.log('Falling back to mock data after refresh error');
@@ -318,8 +330,16 @@ export const SensorProvider = ({ children }) => {
         setLoading(false);
         return mockData;
       } else {
-        setError('Failed to refresh sensor data. Please check your connection and try again.');
-        throw error;
+        setError(errorMessage);
+
+        // If we have connection issues, try to reconnect WebSocket
+        if (!isConnected && user && user.email) {
+          console.log('Connection issue detected, attempting to reconnect WebSocket');
+          connectToWebSocket(user.email);
+        }
+
+        // Don't throw the error - handle it gracefully
+        return [];
       }
     } finally {
       setLoading(false);

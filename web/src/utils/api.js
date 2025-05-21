@@ -14,7 +14,6 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Access-Control-Allow-Origin': '*', // Request CORS headers
   },
   // Disable withCredentials for CORS
   withCredentials: false,
@@ -95,11 +94,26 @@ api.interceptors.response.use(
     // Handle CORS errors
     if (error.message === 'Network Error') {
       console.error('CORS or network error. Check if the server is accessible and CORS is configured correctly.');
+      console.error('Request details:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+        headers: error.config?.headers,
+      });
 
       // If we're in development, suggest using the production API
       if (process.env.NODE_ENV === 'development') {
         console.info('Consider using the production API by editing .env.development file.');
       }
+
+      // Enhance the error message for better user feedback
+      error.message = 'Connection error: Unable to reach the server. Please try again later.';
+    }
+
+    // Handle 500 errors
+    if (error.response && error.response.status === 500) {
+      console.error('Server error (500):', error.response.data);
+      error.message = 'The server encountered an error. Our team has been notified.';
     }
 
     return Promise.reject(error);

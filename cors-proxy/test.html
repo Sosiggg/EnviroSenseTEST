@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EnviroSense CORS Proxy Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    input {
+      padding: 10px;
+      margin-bottom: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .container {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>EnviroSense CORS Proxy Test</h1>
+  
+  <div class="container">
+    <h2>Configuration</h2>
+    <label for="proxy-url">Proxy URL:</label>
+    <input type="text" id="proxy-url" value="https://envirosense-cors-proxy.onrender.com/api" placeholder="Enter proxy URL">
+    
+    <label for="token">JWT Token:</label>
+    <input type="text" id="token" placeholder="Enter your JWT token">
+  </div>
+  
+  <div class="container">
+    <h2>Test Endpoints</h2>
+    <button onclick="testHealth()">Test Health</button>
+    <button onclick="testUserProfile()">Test User Profile</button>
+    <button onclick="testSensorData()">Test Sensor Data</button>
+    <button onclick="testChangePassword()">Test Change Password</button>
+  </div>
+  
+  <div class="container">
+    <h2>Response</h2>
+    <pre id="response">Results will appear here...</pre>
+  </div>
+  
+  <script>
+    // Function to display response
+    function displayResponse(data) {
+      document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+    }
+    
+    // Function to display error
+    function displayError(error) {
+      document.getElementById('response').textContent = `Error: ${error.message}\n\n${error.stack}`;
+    }
+    
+    // Function to get the proxy URL
+    function getProxyUrl() {
+      return document.getElementById('proxy-url').value.trim();
+    }
+    
+    // Function to get the token
+    function getToken() {
+      return document.getElementById('token').value.trim();
+    }
+    
+    // Test health endpoint
+    async function testHealth() {
+      try {
+        const proxyUrl = getProxyUrl();
+        const response = await fetch(`${proxyUrl.replace('/api', '')}/health`);
+        const data = await response.json();
+        displayResponse(data);
+      } catch (error) {
+        displayError(error);
+      }
+    }
+    
+    // Test user profile endpoint
+    async function testUserProfile() {
+      try {
+        const proxyUrl = getProxyUrl();
+        const token = getToken();
+        
+        if (!token) {
+          throw new Error('JWT token is required');
+        }
+        
+        const response = await fetch(`${proxyUrl}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        displayResponse(data);
+      } catch (error) {
+        displayError(error);
+      }
+    }
+    
+    // Test sensor data endpoint
+    async function testSensorData() {
+      try {
+        const proxyUrl = getProxyUrl();
+        const token = getToken();
+        
+        if (!token) {
+          throw new Error('JWT token is required');
+        }
+        
+        const response = await fetch(`${proxyUrl}/sensor/data`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        displayResponse(data);
+      } catch (error) {
+        displayError(error);
+      }
+    }
+    
+    // Test change password endpoint
+    async function testChangePassword() {
+      try {
+        const proxyUrl = getProxyUrl();
+        const token = getToken();
+        
+        if (!token) {
+          throw new Error('JWT token is required');
+        }
+        
+        // This is just a test, so we're using placeholder values
+        const response = await fetch(`${proxyUrl}/auth/change-password`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            current_password: 'test_current_password',
+            new_password: 'test_new_password'
+          })
+        });
+        
+        const data = await response.json();
+        displayResponse(data);
+      } catch (error) {
+        displayError(error);
+      }
+    }
+  </script>
+</body>
+</html>

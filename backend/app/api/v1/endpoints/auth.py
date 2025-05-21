@@ -92,12 +92,33 @@ async def read_users_me(current_user: dict = Depends(get_current_active_user)):
             detail=f"An error occurred while getting the profile: {str(e)}"
         )
 
+@router.options("/me", status_code=status.HTTP_200_OK)
+async def update_user_profile_options():
+    """
+    Handle OPTIONS requests for the update_user_profile endpoint.
+    This is needed for CORS preflight requests.
+    """
+    from fastapi.responses import JSONResponse
+
+    # Return a response with CORS headers
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "PUT, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Max-Age": "86400",  # Cache preflight requests for 24 hours
+        }
+    )
+
 @router.put("/me")
 async def update_user_profile(
     user_update: UserUpdate,
     current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    from fastapi.responses import JSONResponse
+
     try:
         # Check if username is being changed and if it already exists
         if user_update.username != current_user['username']:
@@ -105,7 +126,15 @@ async def update_user_profile(
             query = text("SELECT id FROM users WHERE username = :username LIMIT 1")
             result = db.execute(query, {"username": user_update.username})
             if result.fetchone():
-                raise HTTPException(status_code=400, detail="Username already exists")
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Username already exists"},
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "PUT, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                    }
+                )
 
         # Check if email is being changed and if it already exists
         if user_update.email != current_user['email']:
@@ -113,7 +142,15 @@ async def update_user_profile(
             query = text("SELECT id FROM users WHERE email = :email LIMIT 1")
             result = db.execute(query, {"email": user_update.email})
             if result.fetchone():
-                raise HTTPException(status_code=400, detail="Email already exists")
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Email already exists"},
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "PUT, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                    }
+                )
 
         # Update user with raw SQL
         query = text("UPDATE users SET username = :username, email = :email WHERE id = :user_id")
@@ -124,19 +161,50 @@ async def update_user_profile(
         })
         db.commit()
 
-        # Return updated user data
-        return {
-            "id": current_user['id'],
-            "username": user_update.username,
-            "email": user_update.email,
-            "is_active": current_user['is_active']
-        }
+        # Return updated user data with CORS headers
+        return JSONResponse(
+            content={
+                "id": current_user['id'],
+                "username": user_update.username,
+                "email": user_update.email,
+                "is_active": current_user['is_active']
+            },
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "PUT, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
+        )
     except Exception as e:
         logger.error(f"Error updating user profile: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while updating the profile: {str(e)}"
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"An error occurred while updating the profile: {str(e)}"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "PUT, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
         )
+
+@router.options("/change-password", status_code=status.HTTP_200_OK)
+async def change_password_options():
+    """
+    Handle OPTIONS requests for the change-password endpoint.
+    This is needed for CORS preflight requests.
+    """
+    from fastapi.responses import JSONResponse
+
+    # Return a response with CORS headers
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Max-Age": "86400",  # Cache preflight requests for 24 hours
+        }
+    )
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
@@ -144,10 +212,21 @@ async def change_password(
     current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    from fastapi.responses import JSONResponse
+
     try:
         # Verify current password
         if not verify_password(password_change.current_password, current_user['hashed_password']):
-            raise HTTPException(status_code=400, detail="Incorrect current password")
+            # Return a response with CORS headers
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Incorrect current password"},
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                }
+            )
 
         # Generate new password hash
         hashed_password = get_password_hash(password_change.new_password)
@@ -160,12 +239,27 @@ async def change_password(
         })
         db.commit()
 
-        return {"message": "Password changed successfully"}
+        # Return a response with CORS headers
+        return JSONResponse(
+            content={"message": "Password changed successfully"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
+        )
     except Exception as e:
         logger.error(f"Error changing password: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while changing the password: {str(e)}"
+
+        # Return a response with CORS headers
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"An error occurred while changing the password: {str(e)}"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
         )
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)

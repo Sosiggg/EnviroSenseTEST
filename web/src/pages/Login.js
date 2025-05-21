@@ -349,15 +349,8 @@ const Login = () => {
                 {loading ? <CircularProgress size={24} /> : 'Sign In'}
               </Button>
 
-              <Divider sx={{ my: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  OR
-                </Typography>
-              </Divider>
-
               <Box sx={{ textAlign: 'center', mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Don't have an account?
                 </Typography>
                 <Link
                   component={RouterLink}
@@ -372,7 +365,6 @@ const Login = () => {
                     }
                   }}
                 >
-                  Create an account
                 </Link>
               </Box>
             </Box>

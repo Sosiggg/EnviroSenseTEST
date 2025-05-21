@@ -256,6 +256,25 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
         except:
             pass
 
+@router.options("/data", status_code=status.HTTP_200_OK)
+async def sensor_data_options():
+    """
+    Handle OPTIONS requests for the sensor data endpoint.
+    This is needed for CORS preflight requests.
+    """
+    from fastapi.responses import JSONResponse
+
+    # Return a response with CORS headers
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Max-Age": "86400",  # Cache preflight requests for 24 hours
+        }
+    )
+
 @router.get("/data")
 async def get_sensor_data(
     current_user: dict = Depends(get_current_active_user),
@@ -386,18 +405,26 @@ async def get_sensor_data(
 
             logger.info(f"Successfully retrieved {len(sensor_data)} sensor data points for user {current_user['id']} (page {page}/{total_pages})")
 
-            # Return data with pagination metadata
-            return {
-                "data": sensor_data,
-                "pagination": {
-                    "page": page,
-                    "page_size": page_size,
-                    "total_count": total_count,
-                    "total_pages": total_pages,
-                    "has_next": has_next,
-                    "has_prev": has_prev
+            # Return data with pagination metadata and CORS headers
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content={
+                    "data": sensor_data,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": has_next,
+                        "has_prev": has_prev
+                    }
+                },
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
                 }
-            }
+            )
 
         except Exception as inner_error:
             logger.error(f"Inner error in get_sensor_data: {inner_error}")
@@ -434,35 +461,70 @@ async def get_sensor_data(
                 has_next = page < total_pages
                 has_prev = page > 1
 
-                return {
-                    "data": data,
-                    "pagination": {
-                        "page": page,
-                        "page_size": page_size,
-                        "total_count": total_count,
-                        "total_pages": total_pages,
-                        "has_next": has_next,
-                        "has_prev": has_prev
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    content={
+                        "data": data,
+                        "pagination": {
+                            "page": page,
+                            "page_size": page_size,
+                            "total_count": total_count,
+                            "total_pages": total_pages,
+                            "has_next": has_next,
+                            "has_prev": has_prev
+                        }
+                    },
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
                     }
-                }
+                )
             except Exception as orm_error:
                 logger.error(f"ORM approach failed: {orm_error}")
                 raise orm_error
 
     except Exception as e:
         logger.error(f"Error getting sensor data: {e}")
-        # Return an empty result with pagination structure
-        return {
-            "data": [],
-            "pagination": {
-                "page": page,
-                "page_size": page_size,
-                "total_count": 0,
-                "total_pages": 0,
-                "has_next": False,
-                "has_prev": False
+        # Return an empty result with pagination structure and CORS headers
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content={
+                "data": [],
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": 0,
+                    "total_pages": 0,
+                    "has_next": False,
+                    "has_prev": False
+                }
+            },
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
             }
+        )
+
+@router.options("/data/latest", status_code=status.HTTP_200_OK)
+async def latest_sensor_data_options():
+    """
+    Handle OPTIONS requests for the latest sensor data endpoint.
+    This is needed for CORS preflight requests.
+    """
+    from fastapi.responses import JSONResponse
+
+    # Return a response with CORS headers
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Max-Age": "86400",  # Cache preflight requests for 24 hours
         }
+    )
 
 @router.get("/data/latest")
 async def get_latest_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -604,7 +666,15 @@ async def get_latest_sensor_data(current_user: dict = Depends(get_current_active
                 # We'll continue with the default values already set in latest_data
 
             logger.info(f"Successfully retrieved latest sensor data for user {current_user['id']}")
-            return latest_data
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content=latest_data,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                }
+            )
 
         except Exception as inner_error:
             logger.error(f"Inner error in get_latest_sensor_data: {inner_error}")
@@ -617,16 +687,24 @@ async def get_latest_sensor_data(current_user: dict = Depends(get_current_active
 
                 if not sensor_data:
                     logger.info(f"No sensor data found using ORM for user {current_user['id']}")
-                    # Return empty data instead of 404 error
-                    return {
-                        "id": 0,
-                        "temperature": 0.0,
-                        "humidity": 0.0,
-                        "obstacle": False,
-                        "user_id": current_user['id'],
-                        "timestamp": datetime.now().isoformat(),
-                        "message": "No sensor data available yet"
-                    }
+                    # Return empty data instead of 404 error with CORS headers
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        content={
+                            "id": 0,
+                            "temperature": 0.0,
+                            "humidity": 0.0,
+                            "obstacle": False,
+                            "user_id": current_user['id'],
+                            "timestamp": datetime.now().isoformat(),
+                            "message": "No sensor data available yet"
+                        },
+                        headers={
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Methods": "GET, OPTIONS",
+                            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                        }
+                    )
 
                 # Convert to dictionary with error handling
                 result_data = {
@@ -670,28 +748,53 @@ async def get_latest_sensor_data(current_user: dict = Depends(get_current_active
                     logger.warning(f"Error getting timestamp from ORM: {e}")
 
                 logger.info(f"Successfully retrieved latest sensor data using ORM for user {current_user['id']}")
-                return result_data
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    content=result_data,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                    }
+                )
 
             except Exception as orm_error:
                 logger.error(f"ORM approach failed: {orm_error}")
                 # Fall through to the default response
                 raise orm_error
 
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+    except HTTPException as http_exc:
+        # Return HTTP exceptions with CORS headers
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content={"detail": http_exc.detail},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
+        )
     except Exception as e:
         logger.error(f"Error getting latest sensor data: {e}")
-        # Return a default response instead of an error
-        return {
-            "id": 0,
-            "temperature": 0.0,
-            "humidity": 0.0,
-            "obstacle": False,
-            "user_id": current_user['id'],
-            "timestamp": datetime.now().isoformat(),
-            "message": "Could not retrieve sensor data due to server error"
-        }
+        # Return a default response instead of an error with CORS headers
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content={
+                "id": 0,
+                "temperature": 0.0,
+                "humidity": 0.0,
+                "obstacle": False,
+                "user_id": current_user['id'],
+                "timestamp": datetime.now().isoformat(),
+                "message": "Could not retrieve sensor data due to server error"
+            },
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            }
+        )
 
 @router.get("/data/check")
 async def check_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):

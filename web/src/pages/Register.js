@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  Link, 
+import {
+  Container,
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Paper,
+  Link,
   Alert,
   CircularProgress
 } from '@mui/material';
@@ -30,41 +30,52 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate form
     if (!username.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
       setFormError('Please fill in all fields');
       return;
     }
-    
+
     if (!validateEmail(email)) {
       setFormError('Please enter a valid email address');
       return;
     }
-    
+
     if (password !== confirmPassword) {
       setFormError('Passwords do not match');
       return;
     }
-    
+
     if (password.length < 8) {
       setFormError('Password must be at least 8 characters long');
       return;
     }
-    
+
     setFormError('');
-    
+
     try {
+      console.log('Submitting registration form...');
       await register(username, email, password);
+      console.log('Registration successful!');
       setSuccess(true);
-      
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
         navigate('/login');
       }, 2000);
     } catch (error) {
-      // Error is handled by the auth context
-      console.error('Registration error:', error);
+      // Display the error message from the service or context
+      console.error('Registration error in component:', error);
+
+      // Set a user-friendly error message
+      if (error.message) {
+        setFormError(error.message);
+      } else if (error.response && error.response.data && error.response.data.detail) {
+        setFormError(error.response.data.detail);
+      } else {
+        setFormError('Registration failed. Please try again later.');
+      }
     }
   };
 
@@ -94,19 +105,19 @@ const Register = () => {
           <Typography component="h2" variant="h5" sx={{ mb: 2 }}>
             Sign Up
           </Typography>
-          
+
           {success && (
             <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
               Registration successful! Redirecting to login...
             </Alert>
           )}
-          
+
           {(error || formError) && (
             <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
               {formError || error}
             </Alert>
           )}
-          
+
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
             <TextField
               margin="normal"

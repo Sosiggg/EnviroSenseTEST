@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -34,6 +34,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useSensor } from '../context/SensorContext';
 import { useThemeContext } from '../context/ThemeContext';
+import WebSocketStatus from './WebSocketStatus';
 
 const drawerWidth = 260;
 
@@ -160,10 +161,16 @@ const Layout = () => {
                   {item.icon}
                 </ListItemIcon>
                 <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: location.pathname === item.path ? 'medium' : 'normal'
-                  }}
+                  primary={
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontWeight: location.pathname === item.path ? 'medium' : 'normal'
+                      }}
+                    >
+                      {item.text}
+                    </Typography>
+                  }
                 />
                 {item.text === 'Dashboard' && isConnected && (
                   <Box
@@ -300,7 +307,10 @@ const Layout = () => {
             )}
           </Typography>
 
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {/* WebSocket Status Indicator */}
+            <WebSocketStatus />
+
             {user && (
               <Tooltip title={`Logged in as ${user.username}`}>
                 <Avatar

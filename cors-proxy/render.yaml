@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: envirosense-cors-proxy
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000

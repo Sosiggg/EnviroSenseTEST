@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -188,7 +188,7 @@ const Profile = () => {
 
       <Grid container spacing={4}>
         {/* User Info Card */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
             <Box sx={{
               display: 'flex',
@@ -337,11 +337,17 @@ const Profile = () => {
         </Grid>
 
         {/* Change Password Card */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Change Password
-            </Typography>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 3
+            }}>
+              <Typography variant="h5" component="h2">
+                Change Password
+              </Typography>
+            </Box>
 
             <Divider sx={{ mb: 3 }} />
 

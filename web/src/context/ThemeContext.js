@@ -7,6 +7,9 @@ const ThemeContext = createContext();
 // Create light and dark themes
 const createAppTheme = (mode) => {
   return createTheme({
+    // Base spacing unit in pixels
+    spacing: 8,
+
     palette: {
       mode,
       primary: {
@@ -100,6 +103,18 @@ const createAppTheme = (mode) => {
       borderRadius: 8,
     },
     components: {
+      MuiContainer: {
+        styleOverrides: {
+          root: {
+            paddingLeft: 16,
+            paddingRight: 16,
+            '@media (min-width:600px)': {
+              paddingLeft: 24,
+              paddingRight: 24,
+            },
+          },
+        },
+      },
       MuiButton: {
         styleOverrides: {
           root: {
@@ -139,7 +154,6 @@ const createAppTheme = (mode) => {
       MuiPaper: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
           },
           elevation1: {
             boxShadow: mode === 'dark'
@@ -195,6 +209,12 @@ const createAppTheme = (mode) => {
             padding: 16,
             '&:last-child': {
               paddingBottom: 16,
+            },
+            '@media (min-width:600px)': {
+              padding: 20,
+              '&:last-child': {
+                paddingBottom: 20,
+              },
             },
           },
         },
