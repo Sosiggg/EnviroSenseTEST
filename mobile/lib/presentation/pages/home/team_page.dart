@@ -39,7 +39,7 @@ class TeamPage extends StatelessWidget {
       ),
       const TeamMember(
         name: 'Paigna',
-        role: 'Frontemd Developer & IoT Specialist',
+        role: 'Frontend Developer & IoT Specialist',
         icon: Icons.sensors,
         description:
             'Developed the sensor integration and data collection systems for EnviroSense.',

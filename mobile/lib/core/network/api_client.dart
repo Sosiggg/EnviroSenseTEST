@@ -159,13 +159,60 @@ class ApiClient {
         data: data is String ? data : jsonEncode(data),
       );
 
+      // Log the response for debugging
+      if (kDebugMode) {
+        print('POST response status: ${response.statusCode}');
+        print('POST response data: ${response.data}');
+      }
+
+      // Check for error status codes
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        // Handle error responses
+        if (response.data is Map<String, dynamic>) {
+          final errorData = response.data as Map<String, dynamic>;
+
+          // Add status code to the response
+          errorData['statusCode'] = response.statusCode;
+
+          // Check for FastAPI style error response
+          if (errorData.containsKey('detail')) {
+            return {
+              'error': true,
+              'message': errorData['detail'],
+              'detail': errorData['detail'],
+              'statusCode': response.statusCode,
+            };
+          }
+
+          return errorData;
+        } else {
+          return {
+            'error': true,
+            'message': 'Error ${response.statusCode}',
+            'statusCode': response.statusCode,
+          };
+        }
+      }
+
       // Handle different response types
       if (response.data is Map<String, dynamic>) {
-        return response.data;
+        // Add status code to the response
+        final responseData = response.data as Map<String, dynamic>;
+        responseData['statusCode'] = response.statusCode;
+        return responseData;
       } else if (response.data is String) {
         try {
           // Try to parse string as JSON
-          return jsonDecode(response.data);
+          final jsonData = jsonDecode(response.data);
+          if (jsonData is Map<String, dynamic>) {
+            jsonData['statusCode'] = response.statusCode;
+            return jsonData;
+          } else {
+            return {
+              'message': response.data,
+              'statusCode': response.statusCode,
+            };
+          }
         } catch (e) {
           // If it's not valid JSON, return as a message
           return {'message': response.data, 'statusCode': response.statusCode};
@@ -183,10 +230,20 @@ class ApiClient {
         };
       }
     } on DioException catch (e) {
+      // Log the error for debugging
+      if (kDebugMode) {
+        print('DioException in POST request: ${e.message}');
+        print('DioException response: ${e.response?.data}');
+        print('DioException status code: ${e.response?.statusCode}');
+      }
+
       throw _handleError(e);
     } on SocketException {
       throw const NetworkException('No internet connection');
     } catch (e) {
+      if (kDebugMode) {
+        print('Unknown exception in POST request: $e');
+      }
       throw UnknownException(e.toString());
     }
   }
@@ -270,6 +327,14 @@ class ApiClient {
 
   // Handle Dio errors
   Exception _handleError(DioException error) {
+    // Log detailed error information in debug mode
+    if (kDebugMode) {
+      print('DioException type: ${error.type}');
+      print('DioException message: ${error.message}');
+      print('DioException response status: ${error.response?.statusCode}');
+      print('DioException response data: ${error.response?.data}');
+    }
+
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -280,21 +345,66 @@ class ApiClient {
         final data = error.response?.data;
 
         if (statusCode == 401) {
-          return const UnauthorizedException('Unauthorized');
+          String message = 'Unauthorized';
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
+          }
+          return UnauthorizedException(message);
         } else if (statusCode == 403) {
-          return const ForbiddenException('Forbidden');
+          String message = 'Forbidden';
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
+          }
+          return ForbiddenException(message);
         } else if (statusCode == 404) {
-          return const NotFoundException('Not found');
+          String message = 'Not found';
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
+          }
+          return NotFoundException(message);
         } else if (statusCode == 400) {
           String message = 'Bad request';
-          if (data != null && data is Map && data.containsKey('detail')) {
-            message = data['detail'];
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
           }
           return BadRequestException(message);
         } else if (statusCode == 500) {
-          return const ServerException('Server error');
+          String message = 'Server error';
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
+          }
+          return ServerException(message);
         } else {
-          return ApiException('API error: ${error.message}');
+          // For any other status code, try to extract a meaningful message
+          String message = 'API error: ${error.message}';
+          if (data != null && data is Map) {
+            if (data.containsKey('detail')) {
+              message = data['detail'];
+            } else if (data.containsKey('message')) {
+              message = data['message'];
+            }
+          }
+          return ApiException(message);
         }
       case DioExceptionType.cancel:
         return const RequestCancelledException('Request cancelled');

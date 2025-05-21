@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/errors/api_exceptions.dart';
 import '../../../core/utils/app_logger.dart';
@@ -20,6 +23,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthGetUserProfileRequested>(_onAuthGetUserProfileRequested);
     on<AuthUpdateUserProfileRequested>(_onAuthUpdateUserProfileRequested);
     on<AuthChangePasswordRequested>(_onAuthChangePasswordRequested);
+    on<AuthClearCacheRequested>(_onAuthClearCacheRequested);
   }
 
   Future<void> _onAuthCheckRequested(
@@ -168,22 +172,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             user = fallbackUser;
           }
 
+          // Cache the user data in SharedPreferences
+          await _cacheUserData(user);
+
           AppLogger.i('Login and profile fetch successful');
           emit(AuthLoginSuccess(token: token, user: user));
         } catch (parseError) {
           // If we can't parse the user profile but have a token, still consider it a success
           AppLogger.e('Error handling user profile: $parseError', parseError);
-          emit(
-            AuthLoginSuccess(
-              token: token,
-              user: User(
-                id: 0,
-                username: event.username,
-                email: '',
-                isActive: true,
-              ),
-            ),
+
+          // Create a fallback user
+          final fallbackUser = User(
+            id: 0,
+            username: event.username,
+            email: '',
+            isActive: true,
           );
+
+          // Cache even the fallback user data
+          await _cacheUserData(fallbackUser);
+
+          emit(AuthLoginSuccess(token: token, user: fallbackUser));
         }
       } catch (profileError) {
         // If we can't get the profile but have a token, still consider it a success
@@ -320,6 +329,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
 
     try {
+      AppLogger.i('AuthBloc: Processing logout request');
+
       // Note: WebSocket disconnection is now handled in the HomePage before this event is dispatched
       // This ensures that the WebSocket is properly disconnected before the token is cleared
 
@@ -329,7 +340,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // Clear any cached user data in the API client
       await authRepository.clearUserCache();
 
-      AppLogger.i('User logged out successfully - all user data cleared');
+      // Clear any user-specific data from SharedPreferences
+      await _clearAllUserData();
+
+      AppLogger.i(
+        'AuthBloc: User logged out successfully - all user data cleared',
+      );
 
       // Emit unauthenticated state to trigger navigation to login screen
       emit(const AuthUnauthenticated());
@@ -341,6 +357,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         await authRepository.clearToken();
         await authRepository.clearUserCache();
+        await _clearAllUserData();
         emit(const AuthUnauthenticated());
       } catch (clearError) {
         AppLogger.e(
@@ -356,6 +373,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         await authRepository.clearToken();
         await authRepository.clearUserCache();
+        await _clearAllUserData();
         emit(const AuthUnauthenticated());
       } catch (clearError) {
         AppLogger.e(
@@ -363,6 +381,105 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           clearError,
         );
       }
+    }
+  }
+
+  // Helper method to clear all user-related data from SharedPreferences
+  Future<void> _clearAllUserData() async {
+    try {
+      AppLogger.i(
+        'AuthBloc: Clearing all user-related data from SharedPreferences',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // Clear token
+      await prefs.remove('token');
+
+      // Explicitly clear user_data which contains cached profile
+      await prefs.remove('user_data');
+
+      // Clear any user profile data with a more comprehensive pattern
+      final keys = prefs.getKeys().toList();
+      for (final key in keys) {
+        if (key.startsWith('user_') ||
+            key.contains('profile') ||
+            key.contains('sensor_') ||
+            key.contains('_cache') ||
+            key.contains('_data_') ||
+            key.contains('_history_') ||
+            key.contains('_latest_') ||
+            key.contains('auth_')) {
+          await prefs.remove(key);
+          AppLogger.d('AuthBloc: Removed data for key: $key');
+        }
+      }
+
+      // For extra safety, try to clear any remaining sensor data
+      try {
+        for (final key in prefs.getKeys().where(
+          (k) =>
+              k.contains('temperature') ||
+              k.contains('humidity') ||
+              k.contains('obstacle'),
+        )) {
+          await prefs.remove(key);
+          AppLogger.d('AuthBloc: Removed sensor data for key: $key');
+        }
+      } catch (e) {
+        AppLogger.e('AuthBloc: Error clearing specific sensor data: $e', e);
+        // Continue with other cleanup
+      }
+
+      AppLogger.i('AuthBloc: All user data cleared from SharedPreferences');
+    } catch (e) {
+      AppLogger.e('AuthBloc: Error clearing user data: $e', e);
+      // Don't rethrow - we want to continue with logout even if this fails
+    }
+  }
+
+  // Helper method to cache user data in SharedPreferences
+  Future<void> _cacheUserData(User user) async {
+    try {
+      AppLogger.i(
+        'AuthBloc: Caching user data for ${user.username} (ID: ${user.id})',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // Convert user to JSON
+      final userData = user.toJson();
+
+      // Store the user data
+      await prefs.setString('user_data', jsonEncode(userData));
+
+      AppLogger.i('AuthBloc: User data cached successfully');
+    } catch (e) {
+      AppLogger.e('AuthBloc: Error caching user data: $e', e);
+      // Don't rethrow - we want to continue even if caching fails
+    }
+  }
+
+  // Handler for AuthClearCacheRequested event
+  Future<void> _onAuthClearCacheRequested(
+    AuthClearCacheRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      AppLogger.i('AuthBloc: Clearing user cache on request');
+
+      // Clear user cache in the repository
+      await authRepository.clearUserCache();
+
+      // Clear all user-related data from SharedPreferences
+      await _clearAllUserData();
+
+      AppLogger.i('AuthBloc: User cache cleared successfully');
+
+      // No state change needed - this is just a cleanup operation
+    } catch (e) {
+      AppLogger.e('AuthBloc: Error clearing user cache: $e', e);
+      // Don't emit failure state - this is a silent operation
     }
   }
 
@@ -381,7 +498,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (userProfile.containsKey('error') && userProfile['error'] == true) {
         final errorMessage =
             userProfile['message'] ?? 'Failed to get user profile';
+
+        // Log the full response for debugging
         AppLogger.w('Failed to get user profile: $errorMessage');
+        AppLogger.w('Full user profile response: $userProfile');
+
+        // Check if the error message suggests a session issue
+        if (errorMessage.contains('log out and log in again') ||
+            errorMessage.contains('Authentication error') ||
+            errorMessage.contains('Unable to load your profile')) {
+          // This is likely a session/token issue
+          AppLogger.i('Session issue detected, logging user out');
+
+          // Clear token and cache
+          await authRepository.clearToken();
+          await authRepository.clearUserCache();
+
+          // Emit a more helpful error message and then unauthenticated state
+          emit(AuthFailure('Your session has expired. Please log in again.'));
+
+          // Add a slight delay before emitting unauthenticated to allow the error message to be seen
+          await Future.delayed(const Duration(seconds: 2));
+          emit(const AuthUnauthenticated());
+          return;
+        }
+
         emit(AuthFailure(errorMessage));
         return;
       }

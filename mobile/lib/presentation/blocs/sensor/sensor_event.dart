@@ -18,14 +18,33 @@ class SensorLatestDataRequested extends SensorEvent {
 class SensorDataByDateRangeRequested extends SensorEvent {
   final DateTime startDate;
   final DateTime endDate;
+  final int page;
+  final int pageSize;
 
   const SensorDataByDateRangeRequested({
     required this.startDate,
     required this.endDate,
+    required this.page,
+    required this.pageSize,
   });
 
   @override
-  List<Object?> get props => [startDate, endDate];
+  List<Object?> get props => [startDate, endDate, page, pageSize];
+}
+
+class SensorDataByDatePaginatedRequested extends SensorEvent {
+  final DateTime date;
+  final int page;
+  final int pageSize;
+
+  const SensorDataByDatePaginatedRequested({
+    required this.date,
+    required this.page,
+    required this.pageSize,
+  });
+
+  @override
+  List<Object?> get props => [date, page, pageSize];
 }
 
 class SensorStatisticsRequested extends SensorEvent {
@@ -51,4 +70,8 @@ class SensorWebSocketDataReceivedEvent extends SensorEvent {
 
 class SensorDataClearRequested extends SensorEvent {
   const SensorDataClearRequested();
+}
+
+class SensorResetRequested extends SensorEvent {
+  const SensorResetRequested();
 }

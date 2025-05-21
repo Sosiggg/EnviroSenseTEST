@@ -90,3 +90,7 @@ class AuthChangePasswordRequested extends AuthEvent {
   @override
   List<Object?> get props => [currentPassword, newPassword];
 }
+
+class AuthClearCacheRequested extends AuthEvent {
+  const AuthClearCacheRequested();
+}

@@ -25,4 +25,5 @@ class ApiConstants {
   static const String sensorData = '/sensor/data';
   static const String latestSensorData = '/sensor/data/latest';
   static const String sensorDataStatistics = '/sensor/data/statistics';
+  static const String checkSensorData = '/sensor/data/check';
 }

@@ -257,23 +257,100 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             pass
 
 @router.get("/data")
-async def get_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def get_sensor_data(
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    start_date: str = None,
+    end_date: str = None,
+    page: int = 1,
+    page_size: int = 10
+):
     try:
-        # Log the request
-        logger.info(f"Getting sensor data for user {current_user['id']}")
+        # Log the request with query parameters
+        logger.info(f"Getting sensor data for user {current_user['id']} with params: start_date={start_date}, end_date={end_date}, page={page}, page_size={page_size}")
+
+        # Validate and parse date parameters if provided
+        date_filter_clause = ""
+        query_params = {"user_id": current_user['id']}
+
+        if start_date and end_date:
+            try:
+                # Parse ISO format dates
+                logger.info(f"Filtering by date range: {start_date} to {end_date}")
+
+                # Check if the date is in the future
+                try:
+                    start_date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    end_date_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    now = datetime.now()
+
+                    # If both dates are in the future, return empty results immediately
+                    if start_date_obj > now and end_date_obj > now:
+                        logger.info(f"Both dates are in the future, returning empty results")
+                        return {
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "page_size": page_size,
+                                "total_count": 0,
+                                "total_pages": 0,
+                                "has_next": False,
+                                "has_prev": False
+                            }
+                        }
+                except Exception as future_check_error:
+                    logger.error(f"Error checking future dates: {future_check_error}")
+
+                date_filter_clause = "AND timestamp BETWEEN :start_date AND :end_date"
+                query_params["start_date"] = start_date
+                query_params["end_date"] = end_date
+            except Exception as date_error:
+                logger.error(f"Error parsing date parameters: {date_error}")
+                # Continue without date filtering if there's an error
+
+        # Calculate pagination
+        offset = (page - 1) * page_size
 
         try:
-            # Use raw SQL to get sensor data
-            query = text("SELECT id, temperature, humidity, obstacle, user_id, timestamp FROM sensor_data WHERE user_id = :user_id ORDER BY timestamp DESC")
+            # First, get total count for pagination info
+            count_query = text(f"""
+                SELECT COUNT(*)
+                FROM sensor_data
+                WHERE user_id = :user_id {date_filter_clause}
+            """)
+
+            total_count = db.execute(count_query, query_params).scalar() or 0
+            logger.info(f"Total matching records: {total_count}")
+
+            # Use raw SQL to get sensor data with pagination and date filtering
+            query = text(f"""
+                SELECT id, temperature, humidity, obstacle, user_id, timestamp
+                FROM sensor_data
+                WHERE user_id = :user_id {date_filter_clause}
+                ORDER BY timestamp DESC
+                LIMIT :limit OFFSET :offset
+            """)
+
+            # Add pagination parameters
+            query_params["limit"] = page_size
+            query_params["offset"] = offset
 
             # Execute with error handling
             try:
-                result = db.execute(query, {"user_id": current_user['id']})
+                logger.debug(f"Executing query with params: {query_params}")
+                result = db.execute(query, query_params)
             except Exception as db_error:
                 logger.error(f"Database error in get_sensor_data: {db_error}")
-                # Try a simpler query as fallback
-                fallback_query = text("SELECT * FROM sensor_data WHERE user_id = :user_id ORDER BY timestamp DESC")
-                result = db.execute(fallback_query, {"user_id": current_user['id']})
+                # Try a simpler query as fallback without date filtering
+                fallback_query = text("""
+                    SELECT * FROM sensor_data
+                    WHERE user_id = :user_id
+                    ORDER BY timestamp DESC
+                    LIMIT :limit OFFSET :offset
+                """)
+                fallback_params = {"user_id": current_user['id'], "limit": page_size, "offset": offset}
+                logger.info(f"Trying fallback query: {fallback_query}")
+                result = db.execute(fallback_query, fallback_params)
 
             # Convert to list of dictionaries with error handling
             sensor_data = []
@@ -302,33 +379,90 @@ async def get_sensor_data(current_user: dict = Depends(get_current_active_user),
                     # Skip this row and continue with the next one
                     continue
 
-            logger.info(f"Successfully retrieved {len(sensor_data)} sensor data points for user {current_user['id']}")
-            return sensor_data
+            # Calculate pagination metadata
+            total_pages = (total_count + page_size - 1) // page_size  # Ceiling division
+            has_next = page < total_pages
+            has_prev = page > 1
+
+            logger.info(f"Successfully retrieved {len(sensor_data)} sensor data points for user {current_user['id']} (page {page}/{total_pages})")
+
+            # Return data with pagination metadata
+            return {
+                "data": sensor_data,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": has_next,
+                    "has_prev": has_prev
+                }
+            }
 
         except Exception as inner_error:
             logger.error(f"Inner error in get_sensor_data: {inner_error}")
-            # Try a different approach - use ORM
-            sensor_data_list = db.query(SensorData).filter(
-                SensorData.user_id == current_user['id']
-            ).order_by(SensorData.timestamp.desc()).all()
+            # Try a different approach - use ORM with pagination
+            try:
+                query = db.query(SensorData).filter(SensorData.user_id == current_user['id'])
 
-            # Convert to list of dictionaries
-            return [
-                {
-                    "id": data.id,
-                    "temperature": data.temperature,
-                    "humidity": data.humidity,
-                    "obstacle": data.obstacle,
-                    "user_id": data.user_id,
-                    "timestamp": data.timestamp.isoformat() if data.timestamp else datetime.now().isoformat()
+                # Apply date filtering if provided
+                if start_date and end_date:
+                    query = query.filter(SensorData.timestamp.between(start_date, end_date))
+
+                # Get total count for pagination
+                total_count = query.count()
+
+                # Apply pagination and ordering
+                sensor_data_list = query.order_by(SensorData.timestamp.desc()) \
+                    .offset(offset).limit(page_size).all()
+
+                # Convert to list of dictionaries
+                data = [
+                    {
+                        "id": data.id,
+                        "temperature": data.temperature,
+                        "humidity": data.humidity,
+                        "obstacle": data.obstacle,
+                        "user_id": data.user_id,
+                        "timestamp": data.timestamp.isoformat() if data.timestamp else datetime.now().isoformat()
+                    }
+                    for data in sensor_data_list
+                ]
+
+                # Calculate pagination metadata
+                total_pages = (total_count + page_size - 1) // page_size
+                has_next = page < total_pages
+                has_prev = page > 1
+
+                return {
+                    "data": data,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": has_next,
+                        "has_prev": has_prev
+                    }
                 }
-                for data in sensor_data_list
-            ]
+            except Exception as orm_error:
+                logger.error(f"ORM approach failed: {orm_error}")
+                raise orm_error
 
     except Exception as e:
         logger.error(f"Error getting sensor data: {e}")
-        # Return an empty list instead of an error
-        return []
+        # Return an empty result with pagination structure
+        return {
+            "data": [],
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_count": 0,
+                "total_pages": 0,
+                "has_next": False,
+                "has_prev": False
+            }
+        }
 
 @router.get("/data/latest")
 async def get_latest_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -557,4 +691,63 @@ async def get_latest_sensor_data(current_user: dict = Depends(get_current_active
             "user_id": current_user['id'],
             "timestamp": datetime.now().isoformat(),
             "message": "Could not retrieve sensor data due to server error"
+        }
+
+@router.get("/data/check")
+async def check_sensor_data(current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Check if the user has any sensor data and return diagnostic information"""
+    try:
+        # Check if the user has any sensor data at all
+        count_query = text("SELECT COUNT(*) FROM sensor_data WHERE user_id = :user_id")
+        count_result = db.execute(count_query, {"user_id": current_user['id']}).scalar() or 0
+
+        # Get the date range of available data
+        date_range_query = text("""
+            SELECT
+                MIN(DATE(timestamp)) as first_date,
+                MAX(DATE(timestamp)) as last_date
+            FROM sensor_data
+            WHERE user_id = :user_id
+        """)
+        date_range_result = db.execute(date_range_query, {"user_id": current_user['id']}).fetchone()
+
+        first_date = date_range_result[0] if date_range_result and date_range_result[0] else None
+        last_date = date_range_result[1] if date_range_result and date_range_result[1] else None
+
+        # Get count by date for the last 7 days
+        daily_counts_query = text("""
+            SELECT
+                DATE(timestamp) as date,
+                COUNT(*) as count
+            FROM sensor_data
+            WHERE
+                user_id = :user_id
+                AND timestamp >= DATE('now', '-7 days')
+            GROUP BY DATE(timestamp)
+            ORDER BY date DESC
+        """)
+        daily_counts_result = db.execute(daily_counts_query, {"user_id": current_user['id']}).fetchall()
+
+        daily_counts = [
+            {"date": str(row[0]), "count": row[1]}
+            for row in daily_counts_result
+        ] if daily_counts_result else []
+
+        # Return diagnostic information
+        return {
+            "total_records": count_result,
+            "has_data": count_result > 0,
+            "first_date": str(first_date) if first_date else None,
+            "last_date": str(last_date) if last_date else None,
+            "daily_counts": daily_counts,
+            "user_id": current_user['id'],
+            "username": current_user.get('username', 'unknown')
+        }
+    except Exception as e:
+        logger.error(f"Error checking sensor data: {e}")
+        return {
+            "error": True,
+            "message": f"Error checking sensor data: {str(e)}",
+            "has_data": False,
+            "total_records": 0
         }

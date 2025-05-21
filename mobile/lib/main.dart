@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
-import 'data/repositories/auth_repository_impl.dart';
+import 'data/repositories/auth_repository_provider.dart';
 import 'data/repositories/sensor_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/sensor_repository.dart';
@@ -27,7 +27,7 @@ void main() async {
   final sharedPreferences = await SharedPreferences.getInstance();
 
   // Initialize repositories
-  final AuthRepository authRepository = AuthRepositoryImpl();
+  final AuthRepository authRepository = AuthRepositoryProvider.getRepository();
   final SensorRepository sensorRepository = SensorRepositoryImpl();
 
   // Initialize theme provider

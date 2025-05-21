@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/utils/app_logger.dart';
 import '../../../domain/entities/user.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
@@ -34,14 +35,28 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
 
     // Clear any existing user data
+    _resetUserData();
+
+    // Get fresh user profile data
+    context.read<AuthBloc>().add(const AuthGetUserProfileRequested());
+
+    AppLogger.i(
+      'ProfilePage: Initialized and requested fresh user profile data',
+    );
+  }
+
+  // Helper method to reset all user data
+  void _resetUserData() {
     setState(() {
       _user = null;
       _usernameController.clear();
       _emailController.clear();
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
     });
 
-    // Get fresh user profile data
-    context.read<AuthBloc>().add(const AuthGetUserProfileRequested());
+    AppLogger.i('ProfilePage: User data reset');
   }
 
   @override
@@ -145,6 +160,15 @@ class _ProfilePageState extends State<ProfilePage> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is AuthAuthenticated) {
+          // Check if this is a different user than before
+          if (_user != null && _user!.id != state.user.id) {
+            AppLogger.i(
+              'ProfilePage: Detected user switch from ID ${_user!.id} to ${state.user.id}',
+            );
+            // Complete reset for user switch
+            _resetUserData();
+          }
+
           // Only update if the user is different or null
           if (_user == null ||
               _user!.id != state.user.id ||
@@ -156,10 +180,16 @@ class _ProfilePageState extends State<ProfilePage> {
             });
 
             // Log the user data update
-            debugPrint(
-              'Profile page: Updated user data for ${state.user.username} (ID: ${state.user.id})',
+            AppLogger.i(
+              'ProfilePage: Updated user data for ${state.user.username} (ID: ${state.user.id})',
             );
           }
+        } else if (state is AuthLoginSuccess) {
+          // When a new login occurs, reset all data
+          AppLogger.i('ProfilePage: New login detected, resetting user data');
+          _resetUserData();
+
+          // The AuthAuthenticated state will be emitted later with the user data
         } else if (state is AuthProfileUpdateSuccess) {
           setState(() {
             _user = state.user;
@@ -189,12 +219,14 @@ class _ProfilePageState extends State<ProfilePage> {
             SnackBar(content: Text(state.message), backgroundColor: Colors.red),
           );
         } else if (state is AuthUnauthenticated) {
-          // Clear user data if unauthenticated
-          setState(() {
-            _user = null;
-            _usernameController.clear();
-            _emailController.clear();
-          });
+          // Complete reset for logout
+          AppLogger.i('ProfilePage: User logged out, resetting all data');
+          _resetUserData();
+        } else if (state is AuthLoading) {
+          // Don't reset data during loading
+        } else {
+          // For any other state, log it
+          AppLogger.d('ProfilePage: Received state: ${state.runtimeType}');
         }
       },
       child: Scaffold(

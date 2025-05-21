@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <windows.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -64,6 +65,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // Special handling for keyboard events to prevent duplicate key events
+    // This helps fix the "KeyDownEvent is dispatched, but the state shows that the physical key is already pressed" error
+    case WM_KEYDOWN:
+      if (wparam == 0x53) { // 'S' key virtual key code
+        // For the 'S' key, let Windows handle it normally without passing to Flutter
+        return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+      }
       break;
   }
 

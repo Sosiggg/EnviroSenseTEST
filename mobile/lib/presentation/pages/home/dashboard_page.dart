@@ -6,10 +6,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../domain/entities/sensor_data.dart';
 import '../../blocs/sensor/sensor_bloc.dart';
 import '../../blocs/sensor/sensor_event.dart';
 import '../../blocs/sensor/sensor_state.dart';
+import '../../widgets/simple_sensor_history_view.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -26,16 +28,76 @@ class _DashboardPageState extends State<DashboardPage> {
   Timer? _refreshTimer;
   Timer? _statusUpdateTimer;
 
+  // Helper method to get minimum temperature from chart data
+  double _getMinTemperature(List<SensorData> data) {
+    if (data.isEmpty) return 20.0; // Default min if no data
+
+    // Get the actual minimum value
+    double minValue = data
+        .map((e) => e.temperature)
+        .reduce((a, b) => a < b ? a : b);
+
+    // Round down to nearest 0.5 to create a clean starting point
+    return (minValue * 10).floor() / 10;
+  }
+
+  // Helper method to get maximum temperature from chart data
+  double _getMaxTemperature(List<SensorData> data) {
+    if (data.isEmpty) return 30.0; // Default max if no data
+
+    // Get the actual maximum value
+    double maxValue = data
+        .map((e) => e.temperature)
+        .reduce((a, b) => a > b ? a : b);
+
+    // Round up to nearest 0.5 to create a clean ending point
+    return (maxValue * 10).ceil() / 10;
+  }
+
+  // Helper method to get minimum humidity from chart data
+  double _getMinHumidity(List<SensorData> data) {
+    if (data.isEmpty) return 40.0; // Default min if no data
+
+    // Get the actual minimum value
+    double minValue = data
+        .map((e) => e.humidity)
+        .reduce((a, b) => a < b ? a : b);
+
+    // Round down to nearest 0.5 to create a clean starting point
+    return (minValue * 10).floor() / 10;
+  }
+
+  // Helper method to get maximum humidity from chart data
+  double _getMaxHumidity(List<SensorData> data) {
+    if (data.isEmpty) return 80.0; // Default max if no data
+
+    // Get the actual maximum value
+    double maxValue = data
+        .map((e) => e.humidity)
+        .reduce((a, b) => a > b ? a : b);
+
+    // Round up to nearest 0.5 to create a clean ending point
+    return (maxValue * 10).ceil() / 10;
+  }
+
   @override
   void initState() {
     super.initState();
 
-    // Load sensor data
-    context.read<SensorBloc>().add(const SensorDataRequested());
-    context.read<SensorBloc>().add(const SensorLatestDataRequested());
+    // Reset sensor data first to ensure we don't have any stale data
+    context.read<SensorBloc>().add(const SensorResetRequested());
 
-    // Ensure WebSocket is connected
-    context.read<SensorBloc>().add(const SensorWebSocketConnectRequested());
+    // Wait a moment for the reset to complete
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        // Load fresh sensor data
+        context.read<SensorBloc>().add(const SensorDataRequested());
+        context.read<SensorBloc>().add(const SensorLatestDataRequested());
+
+        // Ensure WebSocket is connected with fresh credentials
+        context.read<SensorBloc>().add(const SensorWebSocketConnectRequested());
+      }
+    });
 
     // Set up a timer to periodically refresh data (as a fallback)
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -73,7 +135,7 @@ class _DashboardPageState extends State<DashboardPage> {
         // This will be rebuilt every time setState is called by the timer
         if (_latestData == null) {
           return const Text(
-            'Last updated: Never',
+            'Last updated: -',
             style: TextStyle(color: Colors.grey, fontSize: 12),
             overflow: TextOverflow.ellipsis,
           );
@@ -91,7 +153,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
         // Show different text based on how recent the data is
         String timeText;
-        if (diff.inSeconds < 60) {
+        if (_latestData!.temperature == 0.0 && _latestData!.humidity == 0.0) {
+          // If we have default values (no real data), show "-"
+          timeText = '-';
+        } else if (diff.inSeconds < 60) {
           timeText = '${diff.inSeconds} seconds ago';
         } else if (diff.inMinutes < 60) {
           timeText = '${diff.inMinutes} minutes ago';
@@ -108,54 +173,136 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Build a simple sensor card without any animations
+  // Build an animated sensor card with visual feedback for updates
   Widget _buildAnimatedSensorCard(
     BuildContext context, {
     required String title,
     required String value,
     required IconData icon,
     required Color color,
-    required bool isUpdated, // Kept for compatibility but not used
+    required bool isUpdated,
   }) {
     // Define fixed heights for consistent card sizing
     const double cardHeight = 120.0;
     const double valueTextHeight = 40.0;
 
-    return SizedBox(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       height: cardHeight, // Fixed height container
       child: Card(
         elevation: 4, // Fixed elevation
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, // Use minimum space needed
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
             children: [
-              Row(
-                children: [
-                  Icon(icon, color: color, size: 24),
-                  const SizedBox(width: 8),
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+              // Background pulse animation when data updates
+              if (isUpdated)
+                Positioned.fill(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 1000),
+                    builder: (context, value, child) {
+                      return Opacity(
+                        opacity: (1.0 - value) * 0.3, // Fade out from 0.3 to 0
+                        child: Container(
+                          color: color.withAlpha(50), // ~0.2 opacity
+                        ),
+                      );
+                    },
                   ),
-                ],
-              ),
-              const Spacer(), // Use spacer instead of SizedBox for flexible spacing
-              SizedBox(
-                height: valueTextHeight, // Fixed height for value text
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: color,
+                ),
+
+              // Card content
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Title row with icon
+                    Row(
+                      children: [
+                        // Animated icon that pulses when data updates
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(
+                            begin: isUpdated ? 1.2 : 1.0,
+                            end: 1.0,
+                          ),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.elasticOut,
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Icon(icon, color: color, size: 24),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                  ),
+                    const Spacer(),
+
+                    // Value display with animation
+                    SizedBox(
+                      height: valueTextHeight,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(
+                            begin: isUpdated ? 1.1 : 1.0,
+                            end: 1.0,
+                          ),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, scaleValue, child) {
+                            return Transform.scale(
+                              scale: scaleValue,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                value, // This is the string value from the parameter
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    // Add a subtle indicator for obstacle detection
+                    if (title == 'Obstacle' && value == 'Detected')
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 1000),
+                        builder: (context, value, child) {
+                          return Container(
+                            height: 4,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  color.withAlpha(
+                                    (value * 204).toInt(),
+                                  ), // ~0.8 opacity
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -167,6 +314,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen width for responsive design
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360; // Extra small screen detection
+    final isMediumScreen =
+        screenWidth < 400 && screenWidth >= 360; // Medium small screen
+
     return RefreshIndicator(
       onRefresh: () async {
         context.read<SensorBloc>().add(const SensorDataRequested());
@@ -176,7 +329,19 @@ class _DashboardPageState extends State<DashboardPage> {
         listener: (context, state) {
           if (state is SensorDataLoaded) {
             setState(() {
+              // Replace the entire list with fresh data
               _sensorData = state.sensorData;
+
+              // Safety check: If we have data, ensure it's all from the same user
+              if (_sensorData.isNotEmpty) {
+                final userId = _sensorData[0].userId;
+                // Filter out any data from different users
+                _sensorData =
+                    _sensorData.where((data) => data.userId == userId).toList();
+                AppLogger.d(
+                  'DashboardPage: Filtered sensor data for user ID: $userId',
+                );
+              }
             });
           } else if (state is SensorLatestDataLoaded) {
             setState(() {
@@ -186,7 +351,24 @@ class _DashboardPageState extends State<DashboardPage> {
             // Update state with new data
             setState(() {
               _latestData = state.sensorData;
-              _sensorData = [state.sensorData, ..._sensorData];
+
+              // Only add the new data if it's for the current user
+              // Check user_id to ensure we're not mixing data from different users
+              if (_sensorData.isEmpty ||
+                  (_sensorData.isNotEmpty &&
+                      _sensorData[0].userId == state.sensorData.userId)) {
+                _sensorData = [state.sensorData, ..._sensorData];
+              } else {
+                // If user_id doesn't match, this might be stale data from a previous user
+                // Clear the list and start fresh
+                _sensorData = [state.sensorData];
+              }
+            });
+          } else if (state is SensorInitial) {
+            // Reset all data when SensorBloc is reset
+            setState(() {
+              _sensorData = [];
+              _latestData = null;
             });
           } else if (state is SensorFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -398,27 +580,77 @@ class _DashboardPageState extends State<DashboardPage> {
                                   statusColor = Colors.orange;
                                 }
 
-                                return Row(
-                                  children: [
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: statusColor,
-                                        shape: BoxShape.circle,
-                                      ),
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withAlpha(50),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: statusColor.withAlpha(100),
+                                      width: 1,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      statusText,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodySmall?.copyWith(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.bold,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Animated pulse for "Live" status
+                                      if (statusText == 'Live')
+                                        TweenAnimationBuilder<double>(
+                                          tween: Tween<double>(
+                                            begin: 0.5,
+                                            end: 1.0,
+                                          ),
+                                          duration: const Duration(
+                                            milliseconds: 1000,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                          builder: (context, value, child) {
+                                            return Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration: BoxDecoration(
+                                                color: statusColor.withAlpha(
+                                                  (value * 255).toInt(),
+                                                ),
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: statusColor
+                                                        .withAlpha(
+                                                          (value * 100).toInt(),
+                                                        ),
+                                                    blurRadius: 4,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      else
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: statusColor,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        statusText,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                          color: statusColor,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 );
                               },
                             ),
@@ -430,12 +662,46 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 const SizedBox(height: 32),
 
-                // Temperature Chart
-                Text(
-                  'Temperature History',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                // Temperature Chart with responsive title
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Temperature History',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        // Smaller font on small screens
+                        fontSize: screenWidth < 360 ? 16 : null,
+                      ),
+                    ),
+                    // Refresh button for chart data
+                    IconButton(
+                      icon: Icon(
+                        Icons.refresh,
+                        // Smaller icon on small screens
+                        size: screenWidth < 360 ? 18 : 20,
+                      ),
+                      onPressed: () {
+                        context.read<SensorBloc>().add(
+                          const SensorDataRequested(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Refreshing chart data...'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      tooltip: 'Refresh chart data',
+                      visualDensity:
+                          screenWidth < 360
+                              ? const VisualDensity(
+                                horizontal: -1,
+                                vertical: -1,
+                              )
+                              : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 BlocBuilder<SensorBloc, SensorState>(
@@ -448,10 +714,31 @@ class _DashboardPageState extends State<DashboardPage> {
                     }
 
                     if (_sensorData.isEmpty) {
-                      return const SizedBox(
+                      return SizedBox(
                         height: 200,
                         child: Center(
-                          child: Text('No temperature data available'),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('No temperature data available'),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  context.read<SensorBloc>().add(
+                                    const SensorDataRequested(),
+                                  );
+                                },
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Refresh'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }
@@ -466,20 +753,39 @@ class _DashboardPageState extends State<DashboardPage> {
                             ? sortedData.sublist(sortedData.length - 20)
                             : sortedData;
 
+                    // Adjust chart height based on screen width
+                    final chartHeight = screenWidth < 360 ? 180.0 : 200.0;
+
+                    // Adjust interval based on screen width
+                    final labelInterval = screenWidth < 360 ? 5 : 4;
+
+                    // Adjust left title reserved size based on screen width
+                    final leftReservedSize = screenWidth < 360 ? 35.0 : 45.0;
+
                     return SizedBox(
-                      height: 200,
+                      height: chartHeight,
                       child: LineChart(
                         LineChartData(
+                          minY:
+                              _getMinTemperature(chartData) -
+                              0.2, // Add small padding below min value for precise scale
+                          maxY:
+                              _getMaxTemperature(chartData) +
+                              0.2, // Add small padding above max value for precise scale
                           gridData: FlGridData(show: false),
                           titlesData: FlTitlesData(
                             leftTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
-                                reservedSize: 40,
+                                reservedSize: leftReservedSize,
+                                interval:
+                                    0.2, // Show labels every 0.2 unit for precise temperature readings
                                 getTitlesWidget: (value, meta) {
                                   return Text(
-                                    value.toInt().toString(),
-                                    style: const TextStyle(fontSize: 10),
+                                    value.toStringAsFixed(1),
+                                    style: TextStyle(
+                                      fontSize: screenWidth < 360 ? 8 : 10,
+                                    ),
                                   );
                                 },
                               ),
@@ -494,12 +800,14 @@ class _DashboardPageState extends State<DashboardPage> {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 reservedSize: 30,
-                                interval: 4, // Only show every 4th label
+                                interval:
+                                    labelInterval
+                                        .toDouble(), // Adjust interval based on screen size
                                 getTitlesWidget: (value, meta) {
                                   if (value.toInt() >= 0 &&
                                       value.toInt() < chartData.length &&
-                                      value.toInt() % 4 == 0) {
-                                    // Only show every 4th label
+                                      value.toInt() % labelInterval == 0) {
+                                    // Only show labels at the interval
                                     final date =
                                         chartData[value.toInt()].timestamp;
                                     return Padding(
@@ -510,7 +818,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                         ).format(
                                           date.add(const Duration(hours: 8)),
                                         ),
-                                        style: const TextStyle(fontSize: 10),
+                                        style: TextStyle(
+                                          fontSize: screenWidth < 360 ? 8 : 10,
+                                        ),
                                       ),
                                     );
                                   }
@@ -531,7 +841,10 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                               isCurved: true,
                               color: AppTheme.chartColors[0],
-                              barWidth: 3,
+                              barWidth:
+                                  screenWidth < 360
+                                      ? 2
+                                      : 3, // Thinner line on small screens
                               isStrokeCapRound: true,
                               dotData: FlDotData(show: false),
                               belowBarData: BarAreaData(
@@ -549,12 +862,46 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 const SizedBox(height: 32),
 
-                // Humidity Chart
-                Text(
-                  'Humidity History',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                // Humidity Chart with responsive title
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Humidity History',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        // Smaller font on small screens
+                        fontSize: screenWidth < 360 ? 16 : null,
+                      ),
+                    ),
+                    // Refresh button for chart data
+                    IconButton(
+                      icon: Icon(
+                        Icons.refresh,
+                        // Smaller icon on small screens
+                        size: screenWidth < 360 ? 18 : 20,
+                      ),
+                      onPressed: () {
+                        context.read<SensorBloc>().add(
+                          const SensorDataRequested(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Refreshing chart data...'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      tooltip: 'Refresh chart data',
+                      visualDensity:
+                          screenWidth < 360
+                              ? const VisualDensity(
+                                horizontal: -1,
+                                vertical: -1,
+                              )
+                              : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 BlocBuilder<SensorBloc, SensorState>(
@@ -567,10 +914,31 @@ class _DashboardPageState extends State<DashboardPage> {
                     }
 
                     if (_sensorData.isEmpty) {
-                      return const SizedBox(
+                      return SizedBox(
                         height: 200,
                         child: Center(
-                          child: Text('No humidity data available'),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('No humidity data available'),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  context.read<SensorBloc>().add(
+                                    const SensorDataRequested(),
+                                  );
+                                },
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Refresh'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }
@@ -585,20 +953,39 @@ class _DashboardPageState extends State<DashboardPage> {
                             ? sortedData.sublist(sortedData.length - 20)
                             : sortedData;
 
+                    // Adjust chart height based on screen width
+                    final chartHeight = screenWidth < 360 ? 180.0 : 200.0;
+
+                    // Adjust interval based on screen width
+                    final labelInterval = screenWidth < 360 ? 5 : 4;
+
+                    // Adjust left title reserved size based on screen width
+                    final leftReservedSize = screenWidth < 360 ? 35.0 : 45.0;
+
                     return SizedBox(
-                      height: 200,
+                      height: chartHeight,
                       child: LineChart(
                         LineChartData(
+                          minY:
+                              _getMinHumidity(chartData) -
+                              0.2, // Add small padding below min value for precise scale
+                          maxY:
+                              _getMaxHumidity(chartData) +
+                              0.2, // Add small padding above max value for precise scale
                           gridData: FlGridData(show: false),
                           titlesData: FlTitlesData(
                             leftTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
-                                reservedSize: 40,
+                                reservedSize: leftReservedSize,
+                                interval:
+                                    0.2, // Show labels every 0.2 unit for precise humidity readings
                                 getTitlesWidget: (value, meta) {
                                   return Text(
-                                    value.toInt().toString(),
-                                    style: const TextStyle(fontSize: 10),
+                                    value.toStringAsFixed(1),
+                                    style: TextStyle(
+                                      fontSize: screenWidth < 360 ? 8 : 10,
+                                    ),
                                   );
                                 },
                               ),
@@ -613,12 +1000,14 @@ class _DashboardPageState extends State<DashboardPage> {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 reservedSize: 30,
-                                interval: 4, // Only show every 4th label
+                                interval:
+                                    labelInterval
+                                        .toDouble(), // Adjust interval based on screen size
                                 getTitlesWidget: (value, meta) {
                                   if (value.toInt() >= 0 &&
                                       value.toInt() < chartData.length &&
-                                      value.toInt() % 4 == 0) {
-                                    // Only show every 4th label
+                                      value.toInt() % labelInterval == 0) {
+                                    // Only show labels at the interval
                                     final date =
                                         chartData[value.toInt()].timestamp;
                                     return Padding(
@@ -629,7 +1018,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                         ).format(
                                           date.add(const Duration(hours: 8)),
                                         ),
-                                        style: const TextStyle(fontSize: 10),
+                                        style: TextStyle(
+                                          fontSize: screenWidth < 360 ? 8 : 10,
+                                        ),
                                       ),
                                     );
                                   }
@@ -650,7 +1041,10 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                               isCurved: true,
                               color: AppTheme.chartColors[1],
-                              barWidth: 3,
+                              barWidth:
+                                  screenWidth < 360
+                                      ? 2
+                                      : 3, // Thinner line on small screens
                               isStrokeCapRound: true,
                               dotData: FlDotData(show: false),
                               belowBarData: BarAreaData(
@@ -667,275 +1061,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   },
                 ),
 
-                // Data History Log
+                // Simple Sensor History View
                 const SizedBox(height: 32),
-                Text(
-                  'Data History Log',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                BlocBuilder<SensorBloc, SensorState>(
-                  builder: (context, state) {
-                    if (state is SensorLoading && _sensorData.isEmpty) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-
-                    if (_sensorData.isEmpty) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(child: Text('No sensor data available')),
-                      );
-                    }
-
-                    // Sort data by timestamp in descending order (newest first)
-                    final sortedData = List<SensorData>.from(_sensorData)
-                      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-                    // Take only the last 20 readings for the list
-                    final listData =
-                        sortedData.length > 20
-                            ? sortedData.sublist(0, 20)
-                            : sortedData;
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      height: 300, // Fixed height for the list
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: listData.length,
-                        separatorBuilder:
-                            (context, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final data = listData[index];
-                          // Adjust timestamp to Manila time (UTC+8)
-                          final manilaTime = data.timestamp.add(
-                            const Duration(hours: 8),
-                          );
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                // For small screens, use a more compact layout
-                                if (constraints.maxWidth < 400) {
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Time row
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.access_time,
-                                            size: 14,
-                                            color:
-                                                Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              DateFormat(
-                                                'MMM dd, yyyy - hh:mm a',
-                                              ).format(manilaTime),
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.bodySmall?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      // Data row
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceAround,
-                                        children: [
-                                          // Temperature
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.thermostat,
-                                                color: AppTheme.chartColors[0],
-                                                size: 16,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${data.temperature.toStringAsFixed(1)}°C',
-                                                style:
-                                                    Theme.of(
-                                                      context,
-                                                    ).textTheme.bodyMedium,
-                                              ),
-                                            ],
-                                          ),
-                                          // Humidity
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.water_drop,
-                                                color: AppTheme.chartColors[1],
-                                                size: 16,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${data.humidity.toStringAsFixed(1)}%',
-                                                style:
-                                                    Theme.of(
-                                                      context,
-                                                    ).textTheme.bodyMedium,
-                                              ),
-                                            ],
-                                          ),
-                                          // Obstacle
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.warning,
-                                                color:
-                                                    data.obstacle
-                                                        ? Colors.red
-                                                        : Colors.green,
-                                                size: 16,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                data.obstacle ? 'Yes' : 'No',
-                                                style:
-                                                    Theme.of(
-                                                      context,
-                                                    ).textTheme.bodyMedium,
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                } else {
-                                  // For larger screens, use the original row layout
-                                  return Row(
-                                    children: [
-                                      // Time column
-                                      Expanded(
-                                        flex: 2,
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              DateFormat(
-                                                'MMM dd, yyyy',
-                                              ).format(manilaTime),
-                                              style:
-                                                  Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                            ),
-                                            Text(
-                                              DateFormat(
-                                                'hh:mm:ss a',
-                                              ).format(manilaTime),
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.bodyMedium?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Temperature column
-                                      Expanded(
-                                        flex: 1,
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.thermostat,
-                                              color: AppTheme.chartColors[0],
-                                              size: 16,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${data.temperature.toStringAsFixed(1)}°C',
-                                              style:
-                                                  Theme.of(
-                                                    context,
-                                                  ).textTheme.bodyMedium,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Humidity column
-                                      Expanded(
-                                        flex: 1,
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.water_drop,
-                                              color: AppTheme.chartColors[1],
-                                              size: 16,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${data.humidity.toStringAsFixed(1)}%',
-                                              style:
-                                                  Theme.of(
-                                                    context,
-                                                  ).textTheme.bodyMedium,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Obstacle column
-                                      Expanded(
-                                        flex: 1,
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.warning,
-                                              color:
-                                                  data.obstacle
-                                                      ? Colors.red
-                                                      : Colors.green,
-                                              size: 16,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              data.obstacle ? 'Yes' : 'No',
-                                              style:
-                                                  Theme.of(
-                                                    context,
-                                                  ).textTheme.bodyMedium,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
+                const SimpleSensorHistoryView(),
               ],
             ),
           );
