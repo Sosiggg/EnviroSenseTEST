@@ -19,7 +19,7 @@ import {
   WifiTethering as WifiIcon,
   WifiOff as WifiOffIcon,
   Refresh as RefreshIcon,
-  Error as ErrorIcon,
+  // ErrorIcon is imported but not used
   Info as InfoIcon
 } from '@mui/icons-material';
 import websocketManager from '../utils/websocket';

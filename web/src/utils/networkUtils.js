@@ -34,7 +34,7 @@ export const isCircuitBreakerOpen = () => {
 export const recordFailure = () => {
   failureCount++;
   console.log(`Circuit breaker: Failure count: ${failureCount}`);
-  
+
   if (failureCount >= FAILURE_THRESHOLD) {
     isCircuitOpen = true;
     circuitResetTime = Date.now() + RESET_TIMEOUT;
@@ -67,9 +67,10 @@ export const hasInternetConnection = async () => {
     // Additional check by trying to reach a reliable host
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
+
     try {
-      const response = await fetch('https://www.google.com/favicon.ico', {
+      // We don't need to use the response, just check if the fetch succeeds
+      await fetch('https://www.google.com/favicon.ico', {
         method: 'HEAD',
         mode: 'no-cors',
         cache: 'no-store',
@@ -122,16 +123,16 @@ export const executeWithRetry = async (fn, options = {}) => {
     try {
       // Execute the function
       const result = await fn();
-      
+
       // If successful, reduce failure count (partial reset for circuit breaker)
       if (failureCount > 0) {
         failureCount = Math.max(0, failureCount - 1);
       }
-      
+
       return result;
     } catch (error) {
       lastError = error;
-      
+
       // Don't retry for certain error types
       if (error.response) {
         const statusCode = error.response.status;
@@ -143,7 +144,7 @@ export const executeWithRetry = async (fn, options = {}) => {
 
       // Increment retry count
       retryCount++;
-      
+
       // If we've reached max retries, record failure and throw
       if (retryCount > maxRetries) {
         recordFailure();
@@ -154,9 +155,9 @@ export const executeWithRetry = async (fn, options = {}) => {
       const delay = useExponentialBackoff
           ? retryDelay * Math.pow(2, retryCount - 1)
           : retryDelay;
-          
+
       console.log(`Retrying request (${retryCount}/${maxRetries}) after ${delay}ms`);
-      
+
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -176,7 +177,7 @@ export const createCacheKey = (url, params = {}) => {
     .sort()
     .map(key => `${key}=${params[key]}`)
     .join('&');
-    
+
   return queryString ? `${url}?${queryString}` : url;
 };
 
@@ -185,7 +186,7 @@ export const createCacheKey = (url, params = {}) => {
  */
 export const apiCache = {
   cache: new Map(),
-  
+
   /**
    * Get item from cache
    * @param {string} key - Cache key
@@ -195,16 +196,16 @@ export const apiCache = {
   get(key, maxAge = 60 * 1000) { // Default 1 minute
     const item = this.cache.get(key);
     if (!item) return undefined;
-    
+
     const now = Date.now();
     if (now - item.timestamp > maxAge) {
       this.cache.delete(key);
       return undefined;
     }
-    
+
     return item.value;
   },
-  
+
   /**
    * Set item in cache
    * @param {string} key - Cache key
@@ -216,7 +217,7 @@ export const apiCache = {
       timestamp: Date.now(),
     });
   },
-  
+
   /**
    * Clear cache
    * @param {string} keyPrefix - Optional key prefix to clear only matching items
