@@ -67,7 +67,8 @@ class ApiClient {
       // Default cache priority is CachePriority.normal
       priority: CachePriority.high,
       // Default behavior is to hit network when cached response is stale
-      hitCacheOnErrorExcept: [401, 403],
+      // hitCacheOnErrorExcept parameter is no longer supported in newer versions
+      // Using policy parameter instead
     );
 
     // Add cache interceptor
