@@ -18,6 +18,7 @@ class NetworkUtils {
   static Future<bool> hasInternetConnection() async {
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
+      // Check if we have no connectivity
       if (connectivityResult == ConnectivityResult.none) {
         return false;
       }
