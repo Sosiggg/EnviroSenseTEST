@@ -342,7 +342,7 @@ async def root():
         "environment": "Production",
         "contact": {
             "support": "For technical support, please check the documentation",
-            "github": "https://github.com/your-repo/envirosense"
+            "github": "https://github.com/Sosiggg/EnviroSense"
         }
     }
 
