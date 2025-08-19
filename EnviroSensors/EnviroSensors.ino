@@ -18,8 +18,8 @@
 #include "DHT.h"
 
 // WiFi Credentials
-const char* ssid = "HakunaMatata";
-const char* password = "Honeybadger@1993";
+const char* ssid = "";
+const char* password = "";
 
 // WebSocket Server
 const char* websocket_host = "envirosense-2khv.onrender.com";  // No `ws://`, just domain
@@ -27,7 +27,7 @@ const uint16_t websocket_port = 443;  // Use 443 for secure WebSocket (wss://)
 const char* websocket_path = "/api/v1/sensor/ws";  // Adjust to match your FastAPI WebSocket endpoint
 
 // JWT Token (get this from login endpoint)
-const char* jwt_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJTb3NpZ2dnMiIsImV4cCI6MTc0NzUwOTk3MX0.7xQVuP0bHxeQCtCELpYsuWqYonhHNDL7lnL7gHR_SIc";
+const char* jwt_token = "";
 
 // Pins
 #define IR_SENSOR_PIN 15
