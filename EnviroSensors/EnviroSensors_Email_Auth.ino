@@ -5,8 +5,8 @@
 #include "DHT.h"
 
 // WiFi Credentials
-const char* ssid = "HakunaMatata";
-const char* password = "Honeybadger@1993";
+const char* ssid = "";
+const char* password = "";
 
 // WebSocket Server
 const char* websocket_host = "envirosense-2khv.onrender.com";
@@ -14,7 +14,7 @@ const uint16_t websocket_port = 443;
 const char* websocket_path = "/api/v1/sensor/ws"; // This should match your backend route
 
 // Email used in query param
-const char* user_email = "ivi.salski.35@gmail.com";
+const char* user_email = "";
 
 // DHT Sensor
 #define DHTPIN 13       // Digital pin connected to the DHT sensor
